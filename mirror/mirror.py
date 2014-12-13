@@ -12,22 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pickle
 from models import Fiddle
 
 __author__ = "Brett Slatkin (bslatkin@gmail.com)"
 
-import datetime
 import hashlib
 import logging
-import pickle
-import re
-import time
 import urllib
-import wsgiref.handlers
 
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
-from google.appengine.ext import db
 import webapp2
 from google.appengine.ext.webapp import template
 from google.appengine.runtime import apiproxy_errors
@@ -35,7 +30,7 @@ from google.appengine.runtime import apiproxy_errors
 import transform_content
 
 
-###############################################################################
+# ##############################################################################
 
 DEBUG = False
 EXPIRATION_DELTA_SECONDS = 3600
@@ -88,9 +83,20 @@ class MirroredContent(object):
         self.data = data
         self.base_url = base_url
 
+
     @staticmethod
-    def get_by_key_name(key_name):
-        return memcache.get(key_name)
+    def store(key, value, chunksize=950000):
+        serialized = pickle.dumps(value, 2)
+        values = {}
+        for i in xrange(0, len(serialized), chunksize):
+            values['%s.%s' % (key, i // chunksize)] = serialized[i: i + chunksize]
+        return memcache.set_multi(values, time=EXPIRATION_DELTA_SECONDS)
+
+    @staticmethod
+    def retrieve(key):
+        result = memcache.get_multi(['%s.%s' % (key, i) for i in xrange(32)])
+        serialized = ''.join([v for k, v in sorted(result.items()) if v is not None])
+        return pickle.loads(serialized)
 
     @staticmethod
     def fetch_and_store(key_name, base_url, root_url, translated_address, mirrored_url):
@@ -141,7 +147,7 @@ class MirroredContent(object):
             status=response.status_code,
             headers=adjusted_headers,
             data=content)
-        if not memcache.add(key_name, new_content, time=EXPIRATION_DELTA_SECONDS):
+        if not MirroredContent.store(key_name, new_content):
             logging.error('memcache.add failed: key_name = "%s", '
                           'original_url = "%s"', key_name, mirrored_url)
 
@@ -224,7 +230,7 @@ class MirrorHandler(BaseHandler):
         # names can only be 500 bytes in length; URLs may be up to 2KB.
         key_name = get_url_key_name(mirrored_url)
 
-        content = MirroredContent.get_by_key_name(key_name)
+        content = MirroredContent.retrieve(key_name)
         cache_miss = False
         if content is None:
             logging.debug("Cache miss")
@@ -240,7 +246,6 @@ class MirrorHandler(BaseHandler):
         if not DEBUG:
             self.response.headers["cache-control"] = \
                 "max-age=%d" % EXPIRATION_DELTA_SECONDS
-
 
         self.response.out.write(content.data)
         # TODO rewrite data here
