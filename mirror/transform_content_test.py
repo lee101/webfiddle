@@ -19,8 +19,7 @@ __author__ = "Brett Slatkin (bslatkin@gmail.com)"
 import logging
 import unittest
 
-import transform_content
-
+from mirror.transform_content import TransformContent
 
 ################################################################################
 
@@ -72,7 +71,7 @@ class TransformTest(unittest.TestCase):
         for tag in tag_tests:
             test = tag % original
             correct = tag % expected
-            result = transform_content.TransformContent(base_url, accessed_url, test)
+            result = TransformContent(base_url, accessed_url, test)
             logging.info("Test with\n"
                          "Accessed: %s\n"
                          "Input   : %s\n"
@@ -81,7 +80,7 @@ class TransformTest(unittest.TestCase):
                          accessed_url, test, result, correct)
             if result != correct:
                 logging.info("FAIL")
-            self.assertEquals(correct, result)
+            self.assertEqual(correct, result)
 
     def testBaseTransform(self):
         self._RunTransformTest(

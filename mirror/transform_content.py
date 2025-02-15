@@ -17,7 +17,7 @@ __author__ = "Brett Slatkin (bslatkin@gmail.com)"
 
 import os
 import re
-import urlparse
+from urllib.parse import urlparse
 
 # ###############################################################################
 
@@ -94,7 +94,7 @@ for reg, replace in UNCOMPILED_REGEXES:
 ################################################################################
 
 def TransformContent(base_url, accessed_url, content):
-    url_obj = urlparse.urlparse(accessed_url)
+    url_obj = urlparse(accessed_url)
     accessed_dir = os.path.dirname(url_obj.path)
     if not accessed_dir.endswith("/"):
         accessed_dir += "/"
