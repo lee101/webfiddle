@@ -7,6 +7,7 @@ import string
 from time import mktime
 import urllib
 from models import BaseModel
+from urllib.parse import quote_plus
 
 from google.cloud import ndb
 
@@ -55,6 +56,6 @@ class GameOnUtils(object):
     @classmethod
     def urlEncode(cls, s):
         s = cls.removeNonAscii(s.lower())
-        s = re.sub("[\s]", "-", s, 0, 0)
-        s = re.sub("[\.\t\,\:;\(\)'@!\\\?#/<>&]", "", s, 0, 0)
-        return urllib.quote_plus(s)
+        s = re.sub(r"[\s]", "-", s, 0, 0)
+        s = re.sub(r"[\.\t\,\:;\(\)'@!\\\?#/<>&]", "", s, 0, 0)
+        return quote_plus(s)

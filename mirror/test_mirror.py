@@ -10,15 +10,27 @@ if os.path.exists("cache.db"):
 from mirror.mirror import mirror_router
 from models import Fiddle
 
-# Override Fiddle.byUrlKey with a dummy implementation so that the mirror handler works.
+# Create a proper DummyFiddle class that matches Fiddle's interface
 class DummyFiddle:
-    script = ""
-    style = ""
+    def __init__(self):
+        self.script = "console.log('test');"
+        self.style = "body { background: white; }"
+        self.id = "test-id"
+        self.title = "Test Fiddle"
+        self.description = "Test Description"
+        self.start_url = "example.com"
+        self.script_language = "javascript"
+        self.style_language = "css"
 
-# This ensures that when mirror_handler calls Fiddle.byUrlKey, it gets a dummy instance.
-Fiddle.byUrlKey = lambda fiddle_name: DummyFiddle()
+    @staticmethod
+    def byUrlKey(urlkey):
+        return DummyFiddle()
 
-# Create the FastAPI app for testing and include the mirror_router.
+# Override Fiddle's byUrlKey with our dummy implementation
+original_byUrlKey = getattr(Fiddle, 'byUrlKey', None)
+Fiddle.byUrlKey = DummyFiddle.byUrlKey
+
+# Create the FastAPI app for testing and include the mirror_router
 app = FastAPI()
 app.include_router(mirror_router)
 client = TestClient(app)
@@ -82,3 +94,8 @@ def test_mirror_handler_real_url():
         assert "<script" in response.text
         # Verify that the additional iframe content (big_add_code) is present.
         assert "addictingwordgames" in response.text
+
+def teardown_module(module):
+    """Restore original byUrlKey method after tests complete"""
+    if original_byUrlKey:
+        Fiddle.byUrlKey = original_byUrlKey

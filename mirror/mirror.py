@@ -211,7 +211,7 @@ async def home_handler(request: Request):
         inputted_url = urllib.parse.unquote(form_url)
         if inputted_url.startswith(HTTP_PREFIX):
             inputted_url = inputted_url[len(HTTP_PREFIX):]
-        return RedirectResponse(url="/" + inputted_url)
+        return RedirectResponse(url=f"/{inputted_url}", status_code=302)
     
     secure_url = None
     if request.url.scheme == "http":
@@ -296,7 +296,7 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
     if '-' not in fiddle_name:
         raise HTTPException(status_code=500)
     if base_url.endswith("favicon.ico"):
-        return RedirectResponse(url="/favicon.ico")
+        return RedirectResponse(url="/favicon.ico", status_code=302)
     
     computed_base_url = f"{fiddle_name}/{base_url}"
     # The original logic removes the first URL segment (fiddle_name) to obtain the translated address.
@@ -316,17 +316,25 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         headers["cache-control"] = "max-age=%d" % EXPIRATION_DELTA_SECONDS
 
     if content.headers.get('content-type', '').startswith('text/html'):
+        headers.pop('content-length', None)  # Remove outdated content-length header
+        headers.pop('content-encoding', None)  # Remove outdated content-encoding header that may cause decoding issues
+        # Ensure content is str before string operations
+        content_str = content.data.decode('utf-8') if isinstance(content.data, bytes) else content.data
+        
         # Inject the request blocker script into the <head> and add additional code after <body>.
         request_blocked_data = re.sub(r'(?P<tag><head[\w\W]*?>)',
                                       r'\g<tag>' + request_blocker(fiddle_name),
-                                      content.data, 1)
+                                      content_str, 1)
         add_data = re.sub(r'(?P<tag><body[\w\W]*?>)',
                           r'\g<tag>' + add_code,
                           request_blocked_data, 1)
         fiddle = Fiddle.byUrlKey(fiddle_name)
-        extra_js = '<script id="webfiddle-js">' + fiddle.script + '</script>'
-        extra_css = '<style id="webfiddle-css">' + fiddle.style + '</style>'
-        analytics_and_add = """
+        if fiddle:
+            script = str(fiddle.script) if fiddle.script is not None else ""
+            style = str(fiddle.style) if fiddle.style is not None else ""
+            extra_js = '<script id="webfiddle-js">' + script + '</script>'
+            extra_css = '<style id="webfiddle-css">' + style + '</style>'
+            analytics_and_add = """
 <script>
     (function (i, s, o, g, r, a, m) {
         i['GoogleAnalyticsObject'] = r;
@@ -346,7 +354,9 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
 
 </script>
 """ + big_add_code
-        final_html = add_data + extra_js + extra_css + analytics_and_add
-        return HTMLResponse(content=final_html, status_code=content.status, headers=headers)
+            final_html = add_data + extra_js + extra_css + analytics_and_add
+            return HTMLResponse(content=final_html, status_code=content.status, headers=headers)
+        else:
+            return HTMLResponse(content=add_data, status_code=content.status, headers=headers)
     else:
         return HTMLResponse(content=content.data, status_code=content.status, headers=headers)
