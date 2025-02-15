@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-# from fastapi.middleware.sessions import SessionMiddleware
+from fastapi.middleware.wsgi import WSGIMiddleware
 
 import fixtures
 from gameon_utils import GameOnUtils
@@ -15,12 +15,6 @@ from mirror.mirror import mirror_router
 from models import Fiddle, default_fiddle
 
 app = FastAPI()
-
-# # Use SessionMiddleware instead of secret_key
-# app.add_middleware(
-#     SessionMiddleware,
-#     secret_key='93986c9cdd240540f70efaea56a9e3f2'
-# )
 
 templates = Jinja2Templates(directory=os.path.dirname(__file__))
 
@@ -33,32 +27,51 @@ debug = (
 
 GCLOUD_STATIC_BUCKET_URL = "/static" if debug else "https://static.netwrck.com/simstatic"
 
+# Mount static files before any routes
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return RedirectResponse(url="/static/favicon.ico", status_code=302)
+
+@app.get("/bingsiteauth.xml", include_in_schema=False)
+async def bingsiteauth():
+    xml_content = """<?xml version="1.0"?>
+<users>
+	<user>1A8F067A516D6AE82B1170B390ECD0EC</user>
+</users>
+"""
+    return Response(content=xml_content, media_type="application/xml")
 
 @app.get("/", response_class=HTMLResponse)
 async def main_handler(request: Request):
-    current_saved_fiddle = {
-        "id": default_fiddle.id,
-        "title": default_fiddle.title,
-        "description": default_fiddle.description,
-        "start_url": default_fiddle.start_url,
-        "script": default_fiddle.script,
-        "style": default_fiddle.style,
-        "script_language": default_fiddle.script_language,
-        "style_language": default_fiddle.style_language
-    }
-    return templates.TemplateResponse("templates/index.jinja2", {
-        "request": request,
-        "fiddle": default_fiddle,
-        "current_saved_fiddle": json.dumps(current_saved_fiddle),
-        "title": "WebSim by Netwrck!",
-        "description": "AI Creator - Make CSS and JavaScript To Create any and every web page! Share the results!",
-        "json": json,
-        "fixtures": fixtures,
-        "GameOnUtils": GameOnUtils,
-        "static_url": GCLOUD_STATIC_BUCKET_URL,
-        "url": request.url,
-    })
+    try:
+        current_saved_fiddle = {
+            "id": default_fiddle.id,
+            "title": default_fiddle.title,
+            "description": default_fiddle.description,
+            "start_url": default_fiddle.start_url,
+            "script": default_fiddle.script,
+            "style": default_fiddle.style,
+            "script_language": default_fiddle.script_language,
+            "style_language": default_fiddle.style_language
+        }
+        return templates.TemplateResponse("templates/index.jinja2", {
+            "request": request,
+            "fiddle": default_fiddle,
+            "current_saved_fiddle": json.dumps(current_saved_fiddle),
+            "title": "WebSim by Netwrck!",
+            "description": "AI Creator - Make CSS and JavaScript To Create any and every web page! Share the results!",
+            "json": json,
+            "fixtures": fixtures,
+            "GameOnUtils": GameOnUtils,
+            "static_url": GCLOUD_STATIC_BUCKET_URL,
+            "url": request.url,
+        })
+    except Exception as e:
+        # Log the error and return a simple error page
+        print(f"Error in main_handler: {str(e)}")
+        return HTMLResponse(content="<h1>Error loading page</h1><p>Please try again later.</p>", status_code=500)
 
 @app.get("/_ah/warmup")
 async def warmup_handler():
@@ -119,8 +132,9 @@ async def sitemap_handler(request: Request):
 
 @app.get("/{url:path}/")
 async def slash_murderer(url: str):
-    return RedirectResponse(url=f"/{url}")
+    return RedirectResponse(url=f"/{url}", status_code=302)
 
+# Include the mirror router
 app.include_router(mirror_router)
 
 if __name__ == "__main__":
