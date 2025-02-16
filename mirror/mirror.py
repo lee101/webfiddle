@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from models import Fiddle
 from mirror.transform_content import TransformContent
+from blacklist import BLACKLISTED_URLS
 
 mirror_router = APIRouter()
 templates = Jinja2Templates(directory=".")
@@ -297,6 +298,11 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         raise HTTPException(status_code=500)
     if base_url.endswith("favicon.ico"):
         return RedirectResponse(url="/favicon.ico", status_code=302)
+    
+    # Check if the URL is blacklisted
+    domain = base_url.split('/')[0].lower()  # Get the domain part
+    if domain in BLACKLISTED_URLS:
+        raise HTTPException(status_code=403, detail="Access to this URL is not allowed")
     
     computed_base_url = f"{fiddle_name}/{base_url}"
     # The original logic removes the first URL segment (fiddle_name) to obtain the translated address.
