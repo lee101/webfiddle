@@ -109,4 +109,10 @@ def TransformContent(base_url, accessed_url, content):
     content = re.sub(r'/(\w+-\w+?)/.*?/\1/', r'/\1/', content)
     
     content = content.replace(MARKER, "")
-    return content
+
+    # Final validation before return
+    if not isinstance(content, str):
+        content = content.decode('utf-8', errors='replace')
+    
+    # Ensure proper encoding
+    return content.encode('utf-8').decode('utf-8')  # Normalize encoding

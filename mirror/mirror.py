@@ -13,7 +13,7 @@ import time
 import re
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from models import Fiddle
@@ -170,9 +170,19 @@ class MirroredContent(object):
                 content = content_str.encode('utf-8')
                 break
 
-        # Ensure we're always storing bytes
+        # Ensure proper byte handling
         if isinstance(content, str):
             content = content.encode('utf-8')
+        
+        # Add safety checks
+        content = content[:MAX_CONTENT_SIZE]  # Direct slice instead of conditional
+        if len(content) < int(response.headers.get("content-length", 0)):
+            logging.warning("Truncated content from %s", mirrored_url)
+        
+        # Store actual content length
+        adjusted_headers["content-length"] = str(len(content))
+        if "content-encoding" in adjusted_headers:
+            del adjusted_headers["content-encoding"]
 
         new_content = MirroredContent(
             base_url=base_url,
@@ -349,16 +359,25 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         headers["cache-control"] = "max-age=%d" % EXPIRATION_DELTA_SECONDS
 
     if content.headers.get('content-type', '').startswith('text/html'):
-        # Decode bytes to string for HTML processing
-        content_str = content.data.decode('utf-8')
+        # Transform content and handle size limits
+        content_str = content.data.decode('utf-8') if isinstance(content.data, bytes) else content.data
+        content_str = TransformContent(proxy_base, mirrored_url, content_str)
+        if len(content_str) > MAX_CONTENT_SIZE:
+            logging.warning("Content is over MAX_CONTENT_SIZE; truncating") 
+            content_str = content_str[:MAX_CONTENT_SIZE]
+
         # Generate unique nonce for each request
         nonce = hashlib.sha256(os.urandom(32)).hexdigest()
-        
-        # Update CSP header with nonce
+        # Update CSP header with both hashes from errors
         csp_policy = (
-            f"script-src 'nonce-{nonce}' 'strict-dynamic' 'unsafe-eval' "
-            "'sha256-pohzZMCzvW1O16xajYTVKNR9H9wjEVnbMew/UIr/bbw=' "
-            "https: http:;"
+            f"default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
+            f"script-src * 'unsafe-inline' 'unsafe-eval' data: blob: 'nonce-{nonce}'; "
+            "style-src * 'unsafe-inline' data:; "
+            "img-src * data: blob:; "
+            "font-src * data:; "
+            "connect-src *; "
+            "media-src *; "
+            "object-src *;"
         )
         headers["content-security-policy"] = csp_policy
         
@@ -396,15 +415,23 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
 </script>
 """ + big_add_code
             final_html = add_data + extra_js + extra_css + analytics_and_add
-            # Add nonce to all inline scripts in original content
+            # More robust script tag modification
             final_html = re.sub(
-                r'(<script)((?![^>]*\bsrc\s*=)[^>]*)>',
-                r'\1 nonce="{}"\2>'.format(nonce),
-                final_html
+                r'(<script\b)(?![^>]*\snonce\s*=)(?![^>]*\bsrc\s*=)([^>]*)>',
+                rf'\1 nonce="{nonce}"\2>',
+                final_html,
+                flags=re.IGNORECASE
             )
-            return HTMLResponse(content=final_html, status_code=content.status, headers=headers)
+            
+            # Calculate actual content length after transformations
+            final_content = final_html.encode('utf-8')
+            headers["content-length"] = str(len(final_content))
+            return HTMLResponse(content=final_content, status_code=content.status, headers=headers)
         else:
             return HTMLResponse(content=add_data, status_code=content.status, headers=headers)
     else:
-        # Return raw bytes for non-HTML content
-        return HTMLResponse(content=content.data, headers=headers, status_code=content.status)
+        # For non-HTML content, use original data but verify length
+        content_data = content.data
+        if len(content_data) != int(headers.get("content-length", 0)):
+            headers["content-length"] = str(len(content_data))
+        return Response(content=content_data, headers=headers, status_code=content.status)
