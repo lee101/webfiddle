@@ -224,15 +224,73 @@ big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;bor
 def request_blocker(fiddle_name):
     return f"""
 <script>
-const proxyPrefix = '/{fiddle_name}/';
-document.addEventListener('click', function(e) {{
-    if (e.target.tagName === 'A' && e.target.href) {{
-        const original = new URL(e.target.href);
-        if (!original.pathname.startsWith(proxyPrefix)) {{
-            e.preventDefault();
-            window.location = proxyPrefix + original.hostname + original.pathname;
-        }}
+var proxyBase = '/{fiddle_name}/';
+var currentDomain = window.location.pathname.split('/')[2];
+
+function rewriteUrl(url) {{
+    // Handle absolute URLs
+    if (/^https?:\\/\\//.test(url)) {{
+        const parser = document.createElement('a');
+        parser.href = url;
+        return proxyBase + parser.hostname + parser.pathname;
     }}
+    // Handle root-relative URLs
+    if (url.startsWith('/')) {{
+        return proxyBase + currentDomain + url;
+    }}
+    // Handle relative URLs
+    const currentPath = window.location.pathname.split('/').slice(0, 4).join('/');
+    return new URL(url, currentPath + '/').pathname;
+}}
+// Remove target="_blank" from all links and handle window.open
+document.addEventListener('DOMContentLoaded', () => {{
+    // Remove target="_blank" from all links
+    const links = document.querySelectorAll('a[target="_blank"]');
+    links.forEach(link => {{
+        link.removeAttribute('target');
+    }});
+}});
+
+// Override window.open to open in same window
+const originalWindowOpen = window.open;
+window.open = function(url, target, features) {{
+    if (url) {{
+        window.location.href = rewriteUrl(url);
+        return null;
+    }}
+    return originalWindowOpen.apply(this, arguments);
+}};
+
+// Override XMLHttpRequest and fetch
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url) {{
+    arguments[1] = rewriteUrl(url);
+    originalOpen.apply(this, arguments);
+}};
+
+const originalFetch = window.fetch;
+window.fetch = function(input, init) {{
+    if (typeof input === 'string') {{
+        input = rewriteUrl(input);
+    }} else if (input instanceof URL) {{
+        input = rewriteUrl(input.href);
+    }}
+    return originalFetch(input, init);
+}};
+
+// Rewrite all DOM elements
+document.addEventListener('DOMContentLoaded', () => {{
+    const attributes = ['href', 'src', 'action', 'data-src'];
+    const elements = document.querySelectorAll([...attributes].map(attr => `[${{attr}}]`).join(','));
+    
+    elements.forEach(element => {{
+        attributes.forEach(attr => {{
+            if (element.hasAttribute(attr)) {{
+                const url = element.getAttribute(attr);
+                element.setAttribute(attr, rewriteUrl(url));
+            }}
+        }});
+    }});
 }});
 </script>
 """
