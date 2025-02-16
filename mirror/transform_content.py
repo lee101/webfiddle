@@ -32,54 +32,15 @@ CSS_IMPORT_START = r"(?i)@import([\t ]+)([\"\']?)"
 # CSS url() call
 CSS_URL_START = r"(?i)\burl\(([\"\']?)"
 
-# Callable replacements for absolute URLs
-
-def absolute_replacement_tag(match):
-    tag = match.group(1)
-    equals = match.group(2)
-    quote = match.group(3)
-    protocol = match.group(4) or "http:"  # Group 4 is the protocol (http: or https:), default to http:
-    domain = match.group(6)  # Group 6 is the domain after TAG_START + ABSOLUTE_URL_REGEX
-    path = match.group(7)    # Group 7 is the path
-    # Preserve fiddle context by using it as the root of the path
-    return f"{tag}{equals}{quote}/{fiddle_name}/{domain}{path}"
-
-def absolute_replacement_css_import(match):
-    protocol = match.group(3) or "http:"  # Group 3 is the protocol
-    domain = match.group(5)  # Group 5 is the domain after CSS_IMPORT_START + ABSOLUTE_URL_REGEX
-    path = match.group(6)    # Group 6 is the path
-    # Preserve fiddle context
-    return f"@import '/{fiddle_name}/{domain}{path}';"
-
-def absolute_replacement_css_url(match):
-    protocol = match.group(2) or "http:"  # Group 2 is the protocol
-    domain = match.group(4)  # Group 4 is the domain after CSS_URL_START + ABSOLUTE_URL_REGEX
-    path = match.group(5)    # Group 5 is the path
-    # Preserve fiddle context
-    return f"url('/{fiddle_name}/{domain}{path}')"
-
-def make_replacement(pattern_type, match, base, accessed_dir):
-    """Helper function to handle both string and function replacements"""
-    if callable(pattern_type):
-        return pattern_type(match)
-    else:
-        # Include fiddle context in the replacement
-        formatted = pattern_type % {
-            "fiddle": fiddle_name,
-            "base": current_domain,
-            "accessed_dir": accessed_dir
-        }
-        return match.expand(formatted)
-
 # Build uncompiled regexes with updated replacement strings to produce expected output
 UNCOMPILED_REGEXES = [
     # For tags with absolute URLs
     (TAG_START + ABSOLUTE_URL_REGEX,
-        r"\g<1>\g<2>\g<3>/%(fiddle)s/\g<6>\g<7>"),  # Directly use captured domain
+        r"\g<1>\g<2>\g<3>/%(fiddle)s/\g<6>\g<7>"),  # Use group numbers from combined regex
 
     # For CSS imports
     (CSS_IMPORT_START + ABSOLUTE_URL_REGEX,
-        r"@import '/%(fiddle)s/\g<5>\g<6>';"),
+        r"@import\1\2/%(fiddle)s/\g<5>\g<6>';"),  # Fix group references
 
     # For CSS URLs
     (CSS_URL_START + ABSOLUTE_URL_REGEX,
@@ -112,33 +73,40 @@ def TransformContent(base_url, accessed_url, content):
         content = content.decode('utf-8')
         
     url_obj = urlparse(accessed_url)
-    accessed_dir = os.path.dirname(url_obj.path)
-    if not accessed_dir.endswith("/"):
+    accessed_dir = os.path.dirname(url_obj.path).lstrip('/')
+    if accessed_dir and not accessed_dir.endswith("/"):
         accessed_dir += "/"
-    if accessed_dir.startswith("/"):
-        accessed_dir = accessed_dir[1:]
 
-    # Use single-level base parsing
+    # Extract domain components more safely
     base_parts = base_url.split('/', 1)
     fiddle_name = base_parts[0]
-    current_domain = base_parts[1].split('/')[0] if len(base_parts) > 1 else ""  # Get primary domain
+    current_domain = base_parts[1].split('/')[0] if len(base_parts) > 1 else ""
 
     sub_dict = {
         "fiddle": fiddle_name,
-        "base": current_domain,  # Just the domain without path
+        "base": current_domain,
         "accessed_dir": accessed_dir
     }
 
+    # Add validation for substitution patterns
     for pattern, replacement in REPLACEMENT_REGEXES:
-        if callable(replacement):
-            # Remove callable replacements as we're using string patterns now
-            continue
         try:
             rep_string = replacement % sub_dict
             content = pattern.sub(rep_string, content)
+        except KeyError as err:
+            print(f"Missing key in substitution: {err}")
+            continue
         except Exception as err:
             print(f"Error processing regex pattern {pattern.pattern}: {err}")
             continue
 
+    # Enhanced URL cleanup
+    content = re.sub(r'(?<!:)/{2,}', '/', content)
+    # Fix duplicate fiddle names in path
+    content = re.sub(r'/([^/]+?)(/\1)+/', r'/\1/', content)
+    
+    # Additional cleanup for manifest paths
+    content = re.sub(r'/(\w+-\w+?)/.*?/\1/', r'/\1/', content)
+    
     content = content.replace(MARKER, "")
     return content

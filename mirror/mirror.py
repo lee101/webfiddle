@@ -122,7 +122,11 @@ class MirroredContent(object):
         """Fetch and cache a page with redirect handling"""
         final_url = mirrored_url
         try:
-            async with httpx.AsyncClient(max_redirects=3) as client:
+            # Add headers to prevent compressed responses
+            async with httpx.AsyncClient(
+                max_redirects=3,
+                headers={'Accept-Encoding': 'identity'}  # Disable compression
+            ) as client:
                 # First HEAD request to check for redirects
                 head_resp = await client.head(mirrored_url, follow_redirects=True)
                 final_url = str(head_resp.url)
@@ -229,15 +233,14 @@ async def home_handler(request: Request):
 
 add_code = """"""
 
-big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://www.addictingwordgames.com">
+big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://www.v5games.com">
     </iframe>"""
 
-def request_blocker(fiddle_name):
+def request_blocker(fiddle_name, nonce):
     return f"""
-<script>
+<script nonce="{nonce}">
 var proxyBase = '/{fiddle_name}/';
 var currentDomain = window.location.pathname.split('/')[2];
-
 function rewriteUrl(url) {{
     // Handle absolute URLs
     if (/^https?:\\/\\//.test(url)) {{
@@ -251,7 +254,8 @@ function rewriteUrl(url) {{
     }}
     // Handle relative URLs
     const currentPath = window.location.pathname.split('/').slice(0, 4).join('/');
-    return new URL(url, currentPath + '/').pathname;
+    const baseUrl = new URL(window.location.origin + currentPath + '/');
+    return new URL(url, baseUrl).pathname;
 }}
 // Remove target="_blank" from all links and handle window.open
 document.addEventListener('DOMContentLoaded', () => {{
@@ -344,15 +348,20 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         headers["cache-control"] = "max-age=%d" % EXPIRATION_DELTA_SECONDS
 
     if content.headers.get('content-type', '').startswith('text/html'):
-        headers.pop('content-length', None)  # Remove outdated content-length header
-        headers.pop('content-encoding', None)  # Remove outdated content-encoding header that may cause decoding issues
-        # Ensure content is str before string operations
+        # Generate unique nonce for each request
+        nonce = hashlib.sha256(os.urandom(32)).hexdigest()
+        
+        # Update CSP header with nonce
+        csp_policy = f"script-src 'nonce-{nonce}' 'strict-dynamic' 'unsafe-eval' https: http:;"
+        headers["content-security-policy"] = csp_policy
+        
+        # Properly handle bytes/str conversion
         content_str = content.data.decode('utf-8') if isinstance(content.data, bytes) else content.data
         
-        # Inject the request blocker script into the <head> and add additional code after <body>.
+        # Use the properly converted content_str
         request_blocked_data = re.sub(r'(?i)<head[^>]*>', 
-            lambda m: m.group() + request_blocker(fiddle_name), 
-            content_str, 
+            lambda m: m.group() + request_blocker(fiddle_name, nonce), 
+            content_str,
             1)
         add_data = re.sub(r'(?P<tag><body[\w\W]*?>)',
                           r'\g<tag>' + add_code,
@@ -363,24 +372,23 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
             style = str(fiddle.style) if fiddle.style is not None else ""
             extra_js = '<script id="webfiddle-js">' + script + '</script>'
             extra_css = '<style id="webfiddle-css">' + style + '</style>'
-            analytics_and_add = """
-<script>
-    (function (i, s, o, g, r, a, m) {
+            analytics_and_add = f"""
+<script nonce="{nonce}">
+    (function (i, s, o, g, r, a, m) {{
         i['GoogleAnalyticsObject'] = r;
-        i[r] = i[r] || function () {
+        i[r] = i[r] || function () {{
             (i[r].q = i[r].q || []).push(arguments)
-        }, i[r].l = 1 * new Date();
+        }}, i[r].l = 1 * new Date();
         a = s.createElement(o),
                 m = s.getElementsByTagName(o)[0];
         a.async = 1;
         a.src = g;
         m.parentNode.insertBefore(a, m)
-    })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
+    }})(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
 
     ga('create', 'UA-57646272-1', 'auto');
     ga('require', 'displayfeatures');
     ga('send', 'pageview');
-
 </script>
 """ + big_add_code
             final_html = add_data + extra_js + extra_css + analytics_and_add
@@ -388,4 +396,7 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         else:
             return HTMLResponse(content=add_data, status_code=content.status, headers=headers)
     else:
+        # Remove length-related headers for ALL content types
+        headers.pop('content-length', None)
+        headers.pop('content-encoding', None)
         return HTMLResponse(content=content.data, status_code=content.status, headers=headers)
