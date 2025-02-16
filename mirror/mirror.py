@@ -244,9 +244,23 @@ async def home_handler(request: Request):
 
 add_code = """"""
 
-big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://textadventure.v5games.com">
+big_add_code = """
+<p style="text-align:center;padding:10px;background:#f5f5f5;margin:10px 0">
+<a href="https://x.com/leeleepenkman" target="_blank">Follow Lee on X/Twitter</a> - Father, Husband, Serial builder creating AI, crypto, games & web tools. We are friends :) AI Will Come To Life!
+<br><br>
+Check out: <a href="https://ebank.nz">eBank.nz</a> (Art Generator) | 
+<a href="https://netwrck.com">Netwrck.com</a> (AI Tools) |
+<a href="https://text-generator.io">Text-Generator.io</a> (AI API) |
+<a href="https://bitbank.nz">BitBank.nz</a> (Crypto AI) |
+<a href="https://readingtime.app.nz">ReadingTime</a> (Kids Reading) |
+<a href="https://rewordgame.com">RewordGame</a> |
+<a href="https://bigmultiplayerchess.com">BigMultiplayerChess</a> |
+<a href="https://webfiddle.net">WebFiddle</a> |
+<a href="https://how.nz">How.nz</a> |
+<a href="https://helix.app.nz">Helix AI Assistant</a>
+</p>
+<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://textadventure.v5games.com">
     </iframe>"""
-
 def request_blocker(fiddle_name):
     return f"""
 <script >
