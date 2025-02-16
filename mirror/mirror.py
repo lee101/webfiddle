@@ -26,9 +26,6 @@ templates = Jinja2Templates(directory=".")
 DEBUG = False
 EXPIRATION_DELTA_SECONDS = 3600 * 24 * 30
 
-# DEBUG = True
-# EXPIRATION_DELTA_SECONDS = 1
-
 HTTP_PREFIX = "http://"
 
 IGNORE_HEADERS = frozenset([
@@ -77,15 +74,11 @@ def init_db():
 
 init_db()
 
-###############################################################################
-
 def get_url_key_name(url):
     url_hash = hashlib.sha256()
     url_hash.update(url.encode('utf-8'))
     return "hash_" + url_hash.hexdigest()
 
-
-###############################################################################
 
 class MirroredContent(object):
     def __init__(self, original_address, translated_address,
@@ -192,10 +185,8 @@ class MirroredContent(object):
         return new_content
 
 
-###############################################################################
 @mirror_router.get("/warmup")
 async def warmup_handler():
-    # No special warmup logic needed for FastAPI.
     return {"status": "ok"}
 
 
@@ -304,7 +295,15 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
     if domain in BLACKLISTED_URLS:
         raise HTTPException(status_code=403, detail="Access to this URL is not allowed")
     
-    computed_base_url = f"{fiddle_name}/{base_url}"
+    # Split the base_url into domain and path
+    url_parts = base_url.split('/', 1)
+    domain = url_parts[0]
+    path = url_parts[1] if len(url_parts) > 1 else ""
+    
+    # Construct the proxy base that should be used for all URLs
+    proxy_base = f"{fiddle_name}/{domain}"
+    computed_base_url = f"{proxy_base}/{path}" if path else proxy_base
+    
     # The original logic removes the first URL segment (fiddle_name) to obtain the translated address.
     translated_address = base_url
     mirrored_url = HTTP_PREFIX + translated_address
@@ -313,7 +312,7 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
     key_name = get_url_key_name(mirrored_url)
     content = MirroredContent.get_by_key_name(key_name)
     if content is None:
-        content = await MirroredContent.fetch_and_store(key_name, computed_base_url, translated_address, mirrored_url)
+        content = await MirroredContent.fetch_and_store(key_name, proxy_base, translated_address, mirrored_url)
     if content is None:
         raise HTTPException(status_code=404)
     
