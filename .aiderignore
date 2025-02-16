@@ -42,4 +42,10 @@ docs/_build/
 node_modules
 .idea
 .env
-.aider.*
+.aider*
+BingSiteAuth.xml
+favicon.ico
+*.png
+*.webm
+*.webp
+

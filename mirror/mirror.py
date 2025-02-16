@@ -224,55 +224,15 @@ big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;bor
 def request_blocker(fiddle_name):
     return f"""
 <script>
-var proxyBase = '/{fiddle_name}/';
-var currentDomain = window.location.pathname.split('/')[2];
-
-function rewriteUrl(url) {{
-    // Handle absolute URLs
-    if (/^https?:\\/\\//.test(url)) {{
-        const parser = document.createElement('a');
-        parser.href = url;
-        return proxyBase + parser.hostname + parser.pathname;
+const proxyPrefix = '/{fiddle_name}/';
+document.addEventListener('click', function(e) {{
+    if (e.target.tagName === 'A' && e.target.href) {{
+        const original = new URL(e.target.href);
+        if (!original.pathname.startsWith(proxyPrefix)) {{
+            e.preventDefault();
+            window.location = proxyPrefix + original.hostname + original.pathname;
+        }}
     }}
-    // Handle root-relative URLs
-    if (url.startsWith('/')) {{
-        return proxyBase + currentDomain + url;
-    }}
-    // Handle relative URLs
-    const currentPath = window.location.pathname.split('/').slice(0, 4).join('/');
-    return new URL(url, currentPath + '/').pathname;
-}}
-
-// Override XMLHttpRequest and fetch
-const originalOpen = XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open = function(method, url) {{
-    arguments[1] = rewriteUrl(url);
-    originalOpen.apply(this, arguments);
-}};
-
-const originalFetch = window.fetch;
-window.fetch = function(input, init) {{
-    if (typeof input === 'string') {{
-        input = rewriteUrl(input);
-    }} else if (input instanceof URL) {{
-        input = rewriteUrl(input.href);
-    }}
-    return originalFetch(input, init);
-}};
-
-// Rewrite all DOM elements
-document.addEventListener('DOMContentLoaded', () => {{
-    const attributes = ['href', 'src', 'action', 'data-src'];
-    const elements = document.querySelectorAll([...attributes].map(attr => `[${{attr}}]`).join(','));
-    
-    elements.forEach(element => {{
-        attributes.forEach(attr => {{
-            if (element.hasAttribute(attr)) {{
-                const url = element.getAttribute(attr);
-                element.setAttribute(attr, rewriteUrl(url));
-            }}
-        }});
-    }});
 }});
 </script>
 """
@@ -294,14 +254,9 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
     if domain in BLACKLISTED_URLS:
         raise HTTPException(status_code=403, detail="Access to this URL is not allowed")
     
-    # Split the base_url into domain and path
-    url_parts = base_url.split('/', 1)
-    domain = url_parts[0]
-    path = url_parts[1] if len(url_parts) > 1 else ""
-    
-    # Construct the proxy base with proper encoding
-    proxy_base = f"{fiddle_name}/{domain}"
-    computed_base_url = f"{proxy_base}/{path}" if path else proxy_base
+    # Parse base_url as domain/path without fiddle prefix
+    domain_part = base_url.split('/', 1)[0]
+    proxy_base = f"{fiddle_name}/{domain_part}"
     
     # Ensure translated_address includes the full path
     translated_address = base_url

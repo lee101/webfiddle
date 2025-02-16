@@ -41,86 +41,49 @@ def absolute_replacement_tag(match):
     protocol = match.group(4) or "http:"  # Group 4 is the protocol (http: or https:), default to http:
     domain = match.group(6)  # Group 6 is the domain after TAG_START + ABSOLUTE_URL_REGEX
     path = match.group(7)    # Group 7 is the path
-    # Keep both fiddle and domain in the path
-    return f"{tag}{equals}{quote}{proxy_base}/{domain}{path}"
+    # Preserve fiddle context by using it as the root of the path
+    return f"{tag}{equals}{quote}/{fiddle_name}/{domain}{path}"
 
 def absolute_replacement_css_import(match):
     protocol = match.group(3) or "http:"  # Group 3 is the protocol
     domain = match.group(5)  # Group 5 is the domain after CSS_IMPORT_START + ABSOLUTE_URL_REGEX
     path = match.group(6)    # Group 6 is the path
-    # Keep both fiddle and domain in the path
-    return f"@import '{proxy_base}/{domain}{path}';"
+    # Preserve fiddle context
+    return f"@import '/{fiddle_name}/{domain}{path}';"
 
 def absolute_replacement_css_url(match):
     protocol = match.group(2) or "http:"  # Group 2 is the protocol
     domain = match.group(4)  # Group 4 is the domain after CSS_URL_START + ABSOLUTE_URL_REGEX
     path = match.group(5)    # Group 5 is the path
-    # Keep both fiddle and domain in the path
-    return f"url('{proxy_base}/{domain}{path}')"
+    # Preserve fiddle context
+    return f"url('/{fiddle_name}/{domain}{path}')"
 
 def make_replacement(pattern_type, match, base, accessed_dir):
     """Helper function to handle both string and function replacements"""
     if callable(pattern_type):
         return pattern_type(match)
     else:
-        # Include both fiddle and domain in the replacement
+        # Include fiddle context in the replacement
         formatted = pattern_type % {
-            "proxy_base": proxy_base,
-            "base": base,
+            "fiddle": fiddle_name,
+            "base": current_domain,
             "accessed_dir": accessed_dir
         }
         return match.expand(formatted)
 
 # Build uncompiled regexes with updated replacement strings to produce expected output
 UNCOMPILED_REGEXES = [
-    # For tags with same-dir URLs (e.g. <img src=...>)
-    (TAG_START + SAME_DIR_URL_REGEX,
-        r"\g<1>\g<2>\g<3>%(proxy_base)s/%(base)s/%(accessed_dir)s\g<4>"),
+    # For tags with absolute URLs
+    (TAG_START + ABSOLUTE_URL_REGEX,
+        r"\g<1>\g<2>\g<3>/%(fiddle)s/\g<6>\g<7>"),  # Directly use captured domain
 
-    # For tags with traversal URLs
-    (TAG_START + TRAVERSAL_URL_REGEX,
-        r"\g<1>\g<2>\g<3>%(proxy_base)s/%(base)s/%(accessed_dir)s\g<4>/\g<5>"),
+    # For CSS imports
+    (CSS_IMPORT_START + ABSOLUTE_URL_REGEX,
+        r"@import '/%(fiddle)s/\g<5>\g<6>';"),
 
-    # For tags with base-relative URLs
-    (TAG_START + BASE_RELATIVE_URL_REGEX,
-        r"\g<1>\g<2>\g<3>%(proxy_base)s/%(base)s\g<4>"),
-
-    # For tags with root directory URLs
-    (TAG_START + ROOT_DIR_URL_REGEX,
-        r"\g<1>\g<2>\g<3>%(proxy_base)s/%(base)s"),
-
-    # For tags with absolute URLs, use callable replacement
-    (TAG_START + ABSOLUTE_URL_REGEX, absolute_replacement_tag),
-
-    # CSS import: same directory
-    (CSS_IMPORT_START + SAME_DIR_URL_REGEX,
-        r"@import '%(proxy_base)s/%(base)s/%(accessed_dir)s\g<3>';"),
-
-    # CSS import: traversal
-    (CSS_IMPORT_START + TRAVERSAL_URL_REGEX,
-        r"@import '%(proxy_base)s/%(base)s/%(accessed_dir)s\g<3>/\g<4>';"),
-
-    # CSS import: base-relative
-    (CSS_IMPORT_START + BASE_RELATIVE_URL_REGEX,
-        r"@import '%(proxy_base)s/%(base)s\g<3>';"),
-
-    # CSS import: absolute, callable replacement
-    (CSS_IMPORT_START + ABSOLUTE_URL_REGEX, absolute_replacement_css_import),
-
-    # CSS url(): same directory
-    (CSS_URL_START + SAME_DIR_URL_REGEX,
-        r"url('%(proxy_base)s/%(base)s/%(accessed_dir)s\g<2>')"),
-
-    # CSS url(): traversal
-    (CSS_URL_START + TRAVERSAL_URL_REGEX,
-        r"url('%(proxy_base)s/%(base)s/%(accessed_dir)s\g<2>/\g<3>')"),
-
-    # CSS url(): base-relative
-    (CSS_URL_START + BASE_RELATIVE_URL_REGEX,
-        r"url('%(proxy_base)s/%(base)s\g<2>')"),
-
-    # CSS url(): absolute, callable replacement
-    (CSS_URL_START + ABSOLUTE_URL_REGEX, absolute_replacement_css_url),
+    # For CSS URLs
+    (CSS_URL_START + ABSOLUTE_URL_REGEX,
+        r"url('/%(fiddle)s/\g<4>\g<5>')"),
 ]
 
 REPLACEMENT_REGEXES = []
@@ -133,10 +96,6 @@ for reg, replace in UNCOMPILED_REGEXES:
         raise
 
 ################################################################################
-
-# Global variables to store the proxy base (fiddle/domain) and current domain
-proxy_base = ""
-current_domain = ""
 
 def TransformContent(base_url, accessed_url, content):
     """Transform URLs in content to be relative to the base_url.
@@ -159,38 +118,27 @@ def TransformContent(base_url, accessed_url, content):
     if accessed_dir.startswith("/"):
         accessed_dir = accessed_dir[1:]
 
-    # base_url should now be in the format "fiddle_name/domain"
-    # We don't need to handle path here as it's managed by accessed_dir
-    global proxy_base, current_domain
-    proxy_base = base_url  # This is already fiddle/domain from mirror.py
-    current_domain = base_url.split('/', 1)[1] if '/' in base_url else ""
+    # Use single-level base parsing
+    base_parts = base_url.split('/', 1)
+    fiddle_name = base_parts[0]
+    current_domain = base_parts[1].split('/')[0] if len(base_parts) > 1 else ""  # Get primary domain
+
+    sub_dict = {
+        "fiddle": fiddle_name,
+        "base": current_domain,  # Just the domain without path
+        "accessed_dir": accessed_dir
+    }
 
     for pattern, replacement in REPLACEMENT_REGEXES:
         if callable(replacement):
-            def safe_replace(m):
-                try:
-                    return replacement(m)
-                except Exception as exc:
-                    print(f"Error applying replacement for regex: {pattern.pattern} with match {m.group(0)}: {exc}")
-                    return m.group(0)
+            # Remove callable replacements as we're using string patterns now
+            continue
+        try:
+            rep_string = replacement % sub_dict
+            content = pattern.sub(rep_string, content)
+        except Exception as err:
+            print(f"Error processing regex pattern {pattern.pattern}: {err}")
+            continue
 
-            try:
-                content = pattern.sub(safe_replace, content)
-            except Exception as err:
-                print(f"Error processing regex pattern {pattern.pattern}: {err}")
-                continue
-        else:
-            try:
-                rep_string = replacement % {
-                    "proxy_base": proxy_base,
-                    "base": current_domain,
-                    "accessed_dir": accessed_dir
-                }
-                content = pattern.sub(rep_string, content)
-            except Exception as err:
-                print(f"Error processing regex pattern {pattern.pattern}: {err}")
-                continue
-
-    # Remove the marker
     content = content.replace(MARKER, "")
     return content

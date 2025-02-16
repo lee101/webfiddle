@@ -84,10 +84,10 @@ class TransformTest(unittest.TestCase):
 
     def testBaseTransform(self):
         self._RunTransformTest(
-            "slashdot.org",
+            "cats-bdml3m/slashdot.org",
             "http://slashdot.org",
             "//images.slashdot.org/iestyles.css?T_2_5_0_204",
-            "/images.slashdot.org/iestyles.css?T_2_5_0_204")
+            "/cats-bdml3m/images.slashdot.org/iestyles.css?T_2_5_0_204")
 
     def testAbsolute(self):
         self._RunTransformTest(
@@ -98,10 +98,10 @@ class TransformTest(unittest.TestCase):
 
     def testRelative(self):
         self._RunTransformTest(
-            "slashdot.org",
+            "cats-bdml3m/slashdot.org",
             "http://slashdot.org",
             "images/foo.html",
-            "/slashdot.org/images/foo.html")
+            "/cats-bdml3m/slashdot.org/images/foo.html")
 
     def testUpDirectory(self):
         self._RunTransformTest(
