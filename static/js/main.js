@@ -14,6 +14,20 @@ var main = (function ($) {
         tabMode: 'spaces' // or 'shift'
     };
 
+    // Add fallback for currentSavedFiddle
+    if (typeof currentSavedFiddle === 'undefined') {
+        window.currentSavedFiddle = {
+            id: '',
+            title: '',
+            description: '',
+            start_url: '',
+            script: '',
+            style: '',
+            script_language: 'javascript',
+            style_language: 'css'
+        };
+    }
+
     self.setup = function () {
         window.jsEditor = CodeMirror($('#js-editor')[0], $.extend({
             mode: {name: "javascript", globalVars: true}
@@ -152,10 +166,22 @@ var main = (function ($) {
                 webFrame.setCSS(editor.getValue());
             }
         })
+        
+        // Also handle keydown for non-printable keys
+        editor.on('change', function (codeMirror, event) {
+            // Show hint on every keydown
+            // editor.showHint({completeSingle: false});
+
+            // INJECT INTO IFRAME
+            if (type == 'css') {
+                webFrame.setCSS(editor.getValue());
+            }
+        });
     };
 
 
     return self;
 })(jQuery);
+
 
 
