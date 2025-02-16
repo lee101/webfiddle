@@ -165,13 +165,14 @@ class MirroredContent(object):
         for content_type in TRANSFORMED_CONTENT_TYPES:
             # startswith() because there could be a 'charset=UTF-8' in the header.
             if page_content_type.startswith(content_type):
-                content = TransformContent(base_url, mirrored_url, content)
+                # Transform and encode to bytes before storage
+                content_str = TransformContent(base_url, mirrored_url, content)
+                content = content_str.encode('utf-8')
                 break
 
-        # If the transformed content is over MAX_CONTENT_SIZE, truncate it (yikes!)
-        if len(content) > MAX_CONTENT_SIZE:
-            logging.warning("Content is over MAX_CONTENT_SIZE; truncating")
-            content = content[:MAX_CONTENT_SIZE]
+        # Ensure we're always storing bytes
+        if isinstance(content, str):
+            content = content.encode('utf-8')
 
         new_content = MirroredContent(
             base_url=base_url,
@@ -348,15 +349,14 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         headers["cache-control"] = "max-age=%d" % EXPIRATION_DELTA_SECONDS
 
     if content.headers.get('content-type', '').startswith('text/html'):
+        # Decode bytes to string for HTML processing
+        content_str = content.data.decode('utf-8')
         # Generate unique nonce for each request
         nonce = hashlib.sha256(os.urandom(32)).hexdigest()
         
         # Update CSP header with nonce
         csp_policy = f"script-src 'nonce-{nonce}' 'strict-dynamic' 'unsafe-eval' https: http:;"
         headers["content-security-policy"] = csp_policy
-        
-        # Properly handle bytes/str conversion
-        content_str = content.data.decode('utf-8') if isinstance(content.data, bytes) else content.data
         
         # Use the properly converted content_str
         request_blocked_data = re.sub(r'(?i)<head[^>]*>', 
@@ -396,7 +396,5 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         else:
             return HTMLResponse(content=add_data, status_code=content.status, headers=headers)
     else:
-        # Remove length-related headers for ALL content types
-        headers.pop('content-length', None)
-        headers.pop('content-encoding', None)
-        return HTMLResponse(content=content.data, status_code=content.status, headers=headers)
+        # Return raw bytes for non-HTML content
+        return HTMLResponse(content=content.data, headers=headers, status_code=content.status)
