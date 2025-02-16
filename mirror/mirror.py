@@ -234,7 +234,7 @@ async def home_handler(request: Request):
 
 add_code = """"""
 
-big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://www.v5games.com">
+big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://textadventure.v5games.com">
     </iframe>"""
 
 def request_blocker(fiddle_name, nonce):
@@ -355,7 +355,11 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         nonce = hashlib.sha256(os.urandom(32)).hexdigest()
         
         # Update CSP header with nonce
-        csp_policy = f"script-src 'nonce-{nonce}' 'strict-dynamic' 'unsafe-eval' https: http:;"
+        csp_policy = (
+            f"script-src 'nonce-{nonce}' 'strict-dynamic' 'unsafe-eval' "
+            "'sha256-pohzZMCzvW1O16xajYTVKNR9H9wjEVnbMew/UIr/bbw=' "
+            "https: http:;"
+        )
         headers["content-security-policy"] = csp_policy
         
         # Use the properly converted content_str
@@ -392,6 +396,12 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
 </script>
 """ + big_add_code
             final_html = add_data + extra_js + extra_css + analytics_and_add
+            # Add nonce to all inline scripts in original content
+            final_html = re.sub(
+                r'(<script)((?![^>]*\bsrc\s*=)[^>]*)>',
+                r'\1 nonce="{}"\2>'.format(nonce),
+                final_html
+            )
             return HTMLResponse(content=final_html, status_code=content.status, headers=headers)
         else:
             return HTMLResponse(content=add_data, status_code=content.status, headers=headers)
