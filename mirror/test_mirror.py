@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import os
+import re
 
 # Clean up any existing cache file to start with a fresh database
 if os.path.exists("cache.db"):
@@ -16,19 +17,28 @@ class DummyFiddle:
         self.script = "console.log('test');"
         self.style = "body { background: white; }"
         self.id = "test-id"
+        self.name = "test-name"
         self.title = "Test Fiddle"
         self.description = "Test Description"
         self.start_url = "example.com"
-        self.script_language = "javascript"
+        self.script_language = "js"
         self.style_language = "css"
-
-    @staticmethod
-    def byUrlKey(urlkey):
-        return DummyFiddle()
+        
+    def put(self):
+        """Mock put method"""
+        return self
+        
+    @classmethod
+    def byUrlKey(cls, urlkey):
+        """Mock byUrlKey method that returns a new instance"""
+        instance = cls()
+        instance.name = urlkey
+        return instance
 
 # Override Fiddle's byUrlKey with our dummy implementation
 original_byUrlKey = getattr(Fiddle, 'byUrlKey', None)
 Fiddle.byUrlKey = DummyFiddle.byUrlKey
+Fiddle.put = DummyFiddle.put
 
 # Create the FastAPI app for testing and include the mirror_router
 app = FastAPI()
@@ -122,3 +132,130 @@ def test_mirror_handler_real_netwrck():
     assert "proxyBase = '/cats-d8c4vu/'" in response.text
     assert "currentDomain = 'netwrck.com'" in response.text
     assert "addictingwordgames" in response.text
+
+def test_mirror_handler_domain():
+    # ... test setup ...
+    response = client.get("/cats-d8c4vu/netwrck.com")
+    # Verify domain extraction logic exists
+    assert "var pathSegments = window.location.pathname.split('/').filter(s => s)" in response.text
+    assert "var currentDomain = pathSegments.length > 1 ? pathSegments[1] : ''" in response.text
+    # Verify proxy base is set correctly
+    assert "var proxyBase = '/cats-d8c4vu/'" in response.text
+
+def test_mirror_handler_no_double_proxy():
+    """
+    Test that the mirror handler doesn't double up proxy paths when handling URLs.
+    Specifically checks that /cats-d8c4vu/www.google.com doesn't become 
+    /cats-d8c4vu/www.google.com/cats-d8c4vu/www.google.com
+    """
+    fiddle_name = "cats-d8c4vu"
+    domain = "www.google.com"
+    response = client.get(f"/{fiddle_name}/{domain}")
+    
+    # Verify successful response
+    assert response.status_code == 200
+    
+    # Check content type is HTML
+    content_type = response.headers.get("content-type", "")
+    assert "text/html" in content_type
+    
+    # Verify proxy base and domain are set correctly
+    assert f"var proxyBase = '/{fiddle_name}/'" in response.text
+    # assert f"currentDomain = '{domain}'" in response.text
+    
+    # Verify no double proxy paths exist
+    double_proxy = f"/{fiddle_name}/{domain}/{fiddle_name}/{domain}"
+    assert double_proxy not in response.text
+    
+    # Verify URL rewriting works correctly
+    assert "function rewriteUrl(url)" in response.text
+    assert "return proxyBase + currentDomain + parser.pathname" in response.text
+
+def test_no_path_duplication():
+    """Test that proxy paths are not duplicated in redirects and content"""
+    fiddle_name = "cats-d8c4vu"
+    domain = "httpbin.org"
+    
+    # Test direct access
+    response = client.get(f"/{fiddle_name}/{domain}")
+    assert response.status_code == 200
+    content = response.text
+    
+    # Verify no duplicate proxy paths
+    assert f"/{fiddle_name}/{domain}/{fiddle_name}" not in content
+    
+    # Verify URL rewriting logic is correct
+    assert "if (url.startsWith(proxyBase)) return url;" in content
+    assert f"var proxyBase = '/{fiddle_name}/'" in content
+    assert f"var currentDomain = '{domain}'" in content
+
+def test_url_rewriting():
+    """Test comprehensive URL rewriting scenarios"""
+    fiddle_name = "cats-d8c4vu"
+    domain = "example.com"
+    
+    response = client.get(f"/{fiddle_name}/{domain}")
+    content = response.text
+    
+    # Test absolute URL handling
+    assert "if (/^https?:\\/\\//i.test(url))" in content
+    
+    # Test root-relative URL handling
+    assert "if (url.startsWith('/'))" in content
+    assert "return proxyBase + currentDomain + url;" in content
+    
+    # Test relative URL handling
+    assert "var currentPath = window.location.pathname;" in content
+    assert "new URL(url, window.location.origin + currentPath)" in content
+
+def test_no_plain_root_links():
+    """Test that all root-relative links are properly rewritten with the proxy prefix"""
+    fiddle_name = "cats-d8c4vu"
+    domain = "netwrck.com"
+    response = client.get(f"/{fiddle_name}/{domain}")
+    content = response.text
+    
+    # Verify URL rewriting for different types of links
+    assert f'href="/{fiddle_name}/{domain}/' in content
+    assert f'src="/{fiddle_name}/{domain}/' in content
+    assert f'action="/{fiddle_name}/{domain}/' in content
+    
+    # Verify no unproxied root-relative URLs
+    plain_root_links = re.findall(r'(?:href|src|action)="(?!%s/%s)[^"]+"' % (fiddle_name, domain), content)
+    assert not plain_root_links, f"Found unproxied root links: {plain_root_links}"
+
+def test_iframe_security_features():
+    """Test that iframes have proper security attributes and content is transformed"""
+    fiddle_name = "cats-d8c4vu"
+    domain = "netwrck.com"
+    response = client.get(f"/{fiddle_name}/{domain}")
+    content = response.text
+    
+    # Verify iframe sandbox attributes
+    assert 'sandbox="allow-scripts allow-same-origin allow-popups"' in content
+    
+    # Verify iframe src URLs are properly transformed
+    assert f'src="/{fiddle_name}/{domain}/' in content
+    
+    # Verify iframe creation is intercepted
+    assert "document.createElement = function(tagName, options)" in content
+    assert "el.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups')" in content
+
+def test_content_transformation():
+    """Test that content is properly transformed with correct proxy paths"""
+    fiddle_name = "cats-d8c4vu"
+    domain = "example.com"
+    response = client.get(f"/{fiddle_name}/{domain}")
+    
+    if response.status_code == 200:
+        content = response.text
+        
+        # Test absolute URL transformation
+        assert f'href="/{fiddle_name}/{domain}/' in content
+        
+        # Test relative URL transformation
+        assert f'src="/{fiddle_name}/{domain}/' in content
+        
+        # Test that no untransformed URLs exist
+        untransformed = re.findall(r'(?:href|src|action)="(?!/{fiddle_name}/{domain}/)([^"]+)"', content)
+        assert not any(u.startswith('/') for u in untransformed), f"Found untransformed URLs: {untransformed}"

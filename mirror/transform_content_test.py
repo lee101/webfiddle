@@ -1,27 +1,11 @@
-#!/usr/bin/env python
-# Copyright 2008 Brett Slatkin
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import re
 
-__author__ = "Brett Slatkin (bslatkin@gmail.com)"
 
 import logging
 import unittest
 
 from mirror.transform_content import TransformContent
 
-################################################################################
 
 class TransformTest(unittest.TestCase):
     def _RunTransformTest(self, base_url, accessed_url, original, expected):
@@ -82,6 +66,63 @@ class TransformTest(unittest.TestCase):
                 logging.info("FAIL")
             self.assertEqual(correct, result)
 
+    def testPreventDoublePrefix(self):
+        """Test that URLs already containing the fiddle prefix are not re-prefixed"""
+        self._RunTransformTest(
+            "cats-bdml3m/slashdot.org",
+            "http://slashdot.org",
+            "/cats-bdml3m/slashdot.org/style.css",
+            "/cats-bdml3m/slashdot.org/style.css")
+
+    def testNestedPaths(self):
+        """Test handling of nested paths in URLs"""
+        self._RunTransformTest(
+            "cats-bdml3m/example.com",
+            "http://example.com/path/to/page.html",
+            "/path/to/resource.jpg",
+            "/cats-bdml3m/example.com/path/to/resource.jpg")
+
+    def testQueryParameters(self):
+        """Test URLs with query parameters"""
+        self._RunTransformTest(
+            "cats-bdml3m/example.com",
+            "http://example.com",
+            "/search?q=test&page=1",
+            "/cats-bdml3m/example.com/search?q=test&page=1")
+
+    def testFragmentIdentifiers(self):
+        """Test URLs with fragment identifiers"""
+        self._RunTransformTest(
+            "cats-bdml3m/example.com",
+            "http://example.com",
+            "/page#section1",
+            "/cats-bdml3m/example.com/page#section1")
+
+    def testMultipleSlashes(self):
+        """Test handling of URLs with multiple consecutive slashes"""
+        self._RunTransformTest(
+            "cats-bdml3m/example.com",
+            "http://example.com",
+            "//path//to//resource",
+            "/cats-bdml3m/example.com/path/to/resource")
+
+    def testEmptyPath(self):
+        """Test handling of empty paths"""
+        self._RunTransformTest(
+            "cats-bdml3m/example.com",
+            "http://example.com",
+            "/",
+            "/cats-bdml3m/example.com/")
+
+    def testDataUrl(self):
+        """Test that data URLs are not transformed"""
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA"
+        self._RunTransformTest(
+            "cats-bdml3m/example.com",
+            "http://example.com",
+            data_url,
+            data_url)
+
     def testBaseTransform(self):
         self._RunTransformTest(
             "cats-bdml3m/slashdot.org",
@@ -105,10 +146,10 @@ class TransformTest(unittest.TestCase):
 
     def testUpDirectory(self):
         self._RunTransformTest(
-            "a248.e.akamai.net",
+            "cats-bdml3m/a248.e.akamai.net",
             "http://a248.e.akamai.net/foobar/is/the/path.html",
             "../layout/mh_phone-home.png",
-            "/a248.e.akamai.net/foobar/is/the/../layout/mh_phone-home.png")
+            "/cats-bdml3m/a248.e.akamai.net/foobar/is/layout/mh_phone-home.png")
 
     def testSameDirectoryRelative(self):
         self._RunTransformTest(
@@ -162,8 +203,3 @@ class TransformTest(unittest.TestCase):
             "/images.slashdot.org/iestyles.css?T_2_5_0_204")
 
 
-################################################################################
-
-if __name__ == "__main__":
-    logging.getLogger().setLevel(logging.DEBUG)
-    unittest.main()
