@@ -222,59 +222,58 @@ big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;bor
     </iframe>"""
 
 def request_blocker(fiddle_name):
-    return """
+    return f"""
 <script>
-var oldOpen = XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open = function (method, url) {
+var proxyBase = '/{fiddle_name}/';
+var currentDomain = window.location.pathname.split('/')[2];
 
-function getPosition(str, m, i) {
-   return str.split(m, i).join(m).length;
-}
-    var fiddle_name = '""" + fiddle_name + """';
-    var fiddle_domain = window.location.pathname.substring(0, getPosition(window.location.pathname, '/', 3))
-    if (url.indexOf(fiddle_name) != -1 || ((/.*http.*/.test(url) || /.*\/\/.*/.test(url)) && (url.indexOf(window.location.hostname) == -1))) {
-        oldOpen.apply(this, arguments);
-    }
-    else if (/.*http.*/.test(url) || /.*\/\/.*/.test(url)) {
-	var host_index = url.indexOf(window.location.host);
-        if (host_index != -1) {
-		//on our url needing fiddle name in the url
-		var start_url = url.slice(0, host_index + window.location.host.length)
-		var end_url = url.slice(host_index + window.location.host.length)
-		url = start_url + fiddle_domain + end_url
-		oldOpen.apply(this, arguments);
-	} else {
-            oldOpen.apply(this, arguments);
-	}
-    }
-    else if (url.indexOf('/') == 0) {
-        url = fiddle_domain + url;
-        oldOpen.apply(this, arguments);
-    }
-    else {
-        console.error("webfiddle doesn't support this type of request")
-    }
-}
-function loadFunction() {
-    var adds = document.getElementsByClassName('adsbygoogle');
+function rewriteUrl(url) {{
+    // Handle absolute URLs
+    if (/^https?:\\/\\//.test(url)) {{
+        const parser = document.createElement('a');
+        parser.href = url;
+        return proxyBase + parser.hostname + parser.pathname;
+    }}
+    // Handle root-relative URLs
+    if (url.startsWith('/')) {{
+        return proxyBase + currentDomain + url;
+    }}
+    // Handle relative URLs
+    const currentPath = window.location.pathname.split('/').slice(0, 4).join('/');
+    return new URL(url, currentPath + '/').pathname;
+}}
 
-    for (var i = 0; i < adds.length; i++) {
-        var add = adds[i];
-        var height = add.offsetHeight;
-        var width = add.offsetWidth;
-        add.parentNode.innerHTML = '<iframe src="http://v5games.com" style="min-width:100%;min-height:100%;border:none" seamless></iframe>'
-    }
-    window.setTimeout(loadFunction, 1000)
+// Override XMLHttpRequest and fetch
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url) {{
+    arguments[1] = rewriteUrl(url);
+    originalOpen.apply(this, arguments);
+}};
 
-}
-if (window.addEventListener) // W3C standard
-{
-  window.addEventListener('load', loadFunction, false); // NB **not** 'onload'
-}
-else if (window.attachEvent) // Microsoft
-{
-  window.attachEvent('onload', loadFunction);
-}
+const originalFetch = window.fetch;
+window.fetch = function(input, init) {{
+    if (typeof input === 'string') {{
+        input = rewriteUrl(input);
+    }} else if (input instanceof URL) {{
+        input = rewriteUrl(input.href);
+    }}
+    return originalFetch(input, init);
+}};
+
+// Rewrite all DOM elements
+document.addEventListener('DOMContentLoaded', () => {{
+    const attributes = ['href', 'src', 'action', 'data-src'];
+    const elements = document.querySelectorAll([...attributes].map(attr => `[${{attr}}]`).join(','));
+    
+    elements.forEach(element => {{
+        attributes.forEach(attr => {{
+            if (element.hasAttribute(attr)) {{
+                const url = element.getAttribute(attr);
+                element.setAttribute(attr, rewriteUrl(url));
+            }}
+        }});
+    }});
+}});
 </script>
 """
 
@@ -327,9 +326,10 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         content_str = content.data.decode('utf-8') if isinstance(content.data, bytes) else content.data
         
         # Inject the request blocker script into the <head> and add additional code after <body>.
-        request_blocked_data = re.sub(r'(?P<tag><head[\w\W]*?>)',
-                                      r'\g<tag>' + request_blocker(fiddle_name),
-                                      content_str, 1)
+        request_blocked_data = re.sub(r'(?i)<head[^>]*>', 
+            lambda m: m.group() + request_blocker(fiddle_name), 
+            content_str, 
+            1)
         add_data = re.sub(r'(?P<tag><body[\w\W]*?>)',
                           r'\g<tag>' + add_code,
                           request_blocked_data, 1)
