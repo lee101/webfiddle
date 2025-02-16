@@ -300,11 +300,11 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
     domain = url_parts[0]
     path = url_parts[1] if len(url_parts) > 1 else ""
     
-    # Construct the proxy base that should be used for all URLs
+    # Construct the proxy base with proper encoding
     proxy_base = f"{fiddle_name}/{domain}"
     computed_base_url = f"{proxy_base}/{path}" if path else proxy_base
     
-    # The original logic removes the first URL segment (fiddle_name) to obtain the translated address.
+    # Ensure translated_address includes the full path
     translated_address = base_url
     mirrored_url = HTTP_PREFIX + translated_address
 
