@@ -11,11 +11,11 @@ MARKER = "###TRANSFORMED###"
 ABSOLUTE_URL_REGEX = r"(http(s?):)?//([^/]+)(/[^\"'> \t\)]+)"
 
 # URLs that are relative to the base of the current hostname.
-# Fixed to use a non‐capturing negative lookahead with balanced parentheses.
-BASE_RELATIVE_URL_REGEX = r"/(?!(?:(?:/)|(?:http(s?)://)|(?:url\(\))))([^\"'> \t\)]*)"
+# Updated to use non‐capturing groups for protocol to avoid unintended capturing.
+BASE_RELATIVE_URL_REGEX = r"/(?!(?:(?:/)|(?:http(?:s)?://)|(?:url\(\))))([^\"'> \t\)]*)"
 
 # URLs that have '../' or './' to start off their paths.
-TRAVERSAL_URL_REGEX = r"((?:\.\./|\.\/))/(?!(?:(?:/)|(?:http(s?)://)|(?:url\(\))))([^\"'> \t\)]*)"
+TRAVERSAL_URL_REGEX = r"((?:\.\./|\./))/(?!(?:(?:/)|(?:http(?:s)?://)|(?:url\(\))))([^\"'> \t\)]*)"
 
 # URLs that are in the same directory as the requested URL.
 SAME_DIR_URL_REGEX = r"(?!(?:(?:/)|(?:http(?:s?)://)|(?:url\(\))))([^\"'> \t\)]+)"
@@ -43,75 +43,70 @@ def absolute_replacement_tag(match):
     return f"{tag}{equals}{quote}{MARKER}/{domain}{path}"
 
 def absolute_replacement_css_import(match):
-    spacing = match.group(1)
-    quote = match.group(2)
     domain = match.group(5)  # Group 5 is the domain after CSS_IMPORT_START + ABSOLUTE_URL_REGEX
     path = match.group(6)    # Group 6 is the path
-    return f"@import{spacing}{quote}{MARKER}/{domain}{path}"
+    return f"@import url({MARKER}/{domain}{path})"
 
 def absolute_replacement_css_url(match):
-    quote = match.group(1)
     domain = match.group(4)  # Group 4 is the domain after CSS_URL_START + ABSOLUTE_URL_REGEX
     path = match.group(5)    # Group 5 is the path
-    return f"url({quote}{MARKER}/{domain}{path})"  # Added closing parenthesis
+    return f"url({MARKER}/{domain}{path})"
 
 def make_replacement(pattern_type, match, base, accessed_dir):
     """Helper function to handle both string and function replacements"""
     if callable(pattern_type):
         return pattern_type(match)
     else:
-        return pattern_type % {
-            "base": base,
-            "accessed_dir": accessed_dir,
-        }
+        formatted = pattern_type % {"base": base, "accessed_dir": accessed_dir}
+        return match.expand(formatted)
 
 # Build uncompiled regexes with marker inserted in the replacement strings for non-absolute cases
 UNCOMPILED_REGEXES = [
     # For tags with same-dir URLs
     (TAG_START + SAME_DIR_URL_REGEX,
-        r"\1\2\3{MARKER}/%(base)s/%(accessed_dir)s\4".format(MARKER=MARKER)),
+        r"\g<1>\g<2>\g<3>{MARKER}/%(base)s/%(accessed_dir)s\g<4>".format(MARKER=MARKER)),
 
     # For tags with traversal URLs
     (TAG_START + TRAVERSAL_URL_REGEX,
-        r"\1\2\3{MARKER}/%(base)s/%(accessed_dir)s\4/\5".format(MARKER=MARKER)),
+        r"\g<1>\g<2>\g<3>{MARKER}/%(base)s/%(accessed_dir)s\g<4>/\g<5>".format(MARKER=MARKER)),
 
     # For tags with base-relative URLs
     (TAG_START + BASE_RELATIVE_URL_REGEX,
-        r"\1\2\3{MARKER}/%(base)s/\4".format(MARKER=MARKER)),
+        r"\g<1>\g<2>\g<3>{MARKER}/%(base)s/\g<4>".format(MARKER=MARKER)),
 
     # For tags with root directory URLs
     (TAG_START + ROOT_DIR_URL_REGEX,
-        r"\1\2\3{MARKER}/%(base)s/".format(MARKER=MARKER)),
+        r"\g<1>\g<2>\g<3>{MARKER}/%(base)s/".format(MARKER=MARKER)),
 
     # For tags with absolute URLs, use callable replacement
     (TAG_START + ABSOLUTE_URL_REGEX, absolute_replacement_tag),
 
     # CSS import: same directory
     (CSS_IMPORT_START + SAME_DIR_URL_REGEX,
-        r"@import\1\2{MARKER}/%(base)s/%(accessed_dir)s\3".format(MARKER=MARKER)),
+        r"@import url({MARKER}/%(base)s/%(accessed_dir)s\g<3>)".format(MARKER=MARKER)),
 
     # CSS import: traversal
     (CSS_IMPORT_START + TRAVERSAL_URL_REGEX,
-        r"@import\1\2{MARKER}/%(base)s/%(accessed_dir)s\3/\4".format(MARKER=MARKER)),
+        r"@import url({MARKER}/%(base)s/%(accessed_dir)s\g<3>/\g<4>)".format(MARKER=MARKER)),
 
     # CSS import: base-relative
     (CSS_IMPORT_START + BASE_RELATIVE_URL_REGEX,
-        r"@import\1\2{MARKER}/%(base)s/\3".format(MARKER=MARKER)),
+        r"@import url({MARKER}/%(base)s/\g<3>)".format(MARKER=MARKER)),
 
     # CSS import: absolute, callable replacement
     (CSS_IMPORT_START + ABSOLUTE_URL_REGEX, absolute_replacement_css_import),
 
     # CSS url(): same directory
     (CSS_URL_START + SAME_DIR_URL_REGEX,
-        r"url(\1{MARKER}/%(base)s/%(accessed_dir)s\2)".format(MARKER=MARKER)),
+        r"url(\g<1>{MARKER}/%(base)s/%(accessed_dir)s\g<2>)".format(MARKER=MARKER)),
 
     # CSS url(): traversal
     (CSS_URL_START + TRAVERSAL_URL_REGEX,
-        r"url(\1{MARKER}/%(base)s/%(accessed_dir)s\2/\3)".format(MARKER=MARKER)),
+        r"url(\g<1>{MARKER}/%(base)s/%(accessed_dir)s\g<2>/\g<3>)".format(MARKER=MARKER)),
 
     # CSS url(): base-relative
     (CSS_URL_START + BASE_RELATIVE_URL_REGEX,
-        r"url(\1{MARKER}/%(base)s/\2)".format(MARKER=MARKER)),
+        r"url(\g<1>{MARKER}/%(base)s/\g<2>)".format(MARKER=MARKER)),
 
     # CSS url(): absolute, callable replacement
     (CSS_URL_START + ABSOLUTE_URL_REGEX, absolute_replacement_css_url),
@@ -153,18 +148,26 @@ def TransformContent(base_url, accessed_url, content):
     base = base_url.split('/')[0] if '/' in base_url else base_url
         
     for pattern, replacement in REPLACEMENT_REGEXES:
-        def safe_replace(match):
-            try:
-                return make_replacement(replacement, match, base, accessed_dir)
-            except Exception as exc:
-                print(f"Error applying replacement for regex: {pattern.pattern} with match {match.group(0)}: {exc}")
-                return match.group(0)
+        if callable(replacement):
+            def safe_replace(m):
+                try:
+                    return replacement(m)
+                except Exception as exc:
+                    print(f"Error applying replacement for regex: {pattern.pattern} with match {m.group(0)}: {exc}")
+                    return m.group(0)
 
-        try:
-            content = pattern.sub(safe_replace, content)
-        except Exception as err:
-            print(f"Error processing regex pattern {pattern.pattern}: {err}")
-            continue
+            try:
+                content = pattern.sub(safe_replace, content)
+            except Exception as err:
+                print(f"Error processing regex pattern {pattern.pattern}: {err}")
+                continue
+        else:
+            try:
+                rep_string = replacement % {"base": base, "accessed_dir": accessed_dir}
+                content = pattern.sub(rep_string, content)
+            except Exception as err:
+                print(f"Error processing regex pattern {pattern.pattern}: {err}")
+                continue
 
     # Remove the marker
     content = content.replace(MARKER, "")
