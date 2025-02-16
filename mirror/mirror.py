@@ -247,9 +247,9 @@ add_code = """"""
 big_add_code = """<iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://textadventure.v5games.com">
     </iframe>"""
 
-def request_blocker(fiddle_name, nonce):
+def request_blocker(fiddle_name):
     return f"""
-<script nonce="{nonce}">
+<script >
 var proxyBase = '/{fiddle_name}/';
 var currentDomain = window.location.pathname.split('/')[2];
 function rewriteUrl(url) {{
@@ -367,11 +367,11 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
             content_str = content_str[:MAX_CONTENT_SIZE]
 
         # Generate unique nonce for each request
-        nonce = hashlib.sha256(os.urandom(32)).hexdigest()
+        # nonce = hashlib.sha256(os.urandom(32)).hexdigest()
         # Update CSP header with both hashes from errors
         csp_policy = (
-            f"default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
-            f"script-src * 'unsafe-inline' 'unsafe-eval' data: blob: 'nonce-{nonce}'; "
+            "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
+            "script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
             "style-src * 'unsafe-inline' data:; "
             "img-src * data: blob:; "
             "font-src * data:; "
@@ -383,7 +383,7 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
         
         # Use the properly converted content_str
         request_blocked_data = re.sub(r'(?i)<head[^>]*>', 
-            lambda m: m.group() + request_blocker(fiddle_name, nonce), 
+            lambda m: m.group() + request_blocker(fiddle_name), 
             content_str,
             1)
         add_data = re.sub(r'(?P<tag><body[\w\W]*?>)',
@@ -396,7 +396,7 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
             extra_js = '<script id="webfiddle-js">' + script + '</script>'
             extra_css = '<style id="webfiddle-css">' + style + '</style>'
             analytics_and_add = f"""
-<script nonce="{nonce}">
+<script>
     (function (i, s, o, g, r, a, m) {{
         i['GoogleAnalyticsObject'] = r;
         i[r] = i[r] || function () {{
@@ -415,14 +415,7 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
 </script>
 """ + big_add_code
             final_html = add_data + extra_js + extra_css + analytics_and_add
-            # More robust script tag modification
-            final_html = re.sub(
-                r'(<script\b)(?![^>]*\snonce\s*=)(?![^>]*\bsrc\s*=)([^>]*)>',
-                rf'\1 nonce="{nonce}"\2>',
-                final_html,
-                flags=re.IGNORECASE
-            )
-            
+            # No nonce needed for scripts
             # Calculate actual content length after transformations
             final_content = final_html.encode('utf-8')
             headers["content-length"] = str(len(final_content))
