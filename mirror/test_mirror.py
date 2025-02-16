@@ -99,3 +99,26 @@ def teardown_module(module):
     """Restore original byUrlKey method after tests complete"""
     if original_byUrlKey:
         Fiddle.byUrlKey = original_byUrlKey
+
+
+def test_mirror_handler_real_netwrck():
+    """
+    Test the mirror endpoint using a real fiddle and URL for netwrck.com.
+    This tests a real-world case with a valid fiddle name and domain.
+    """
+    fiddle_name = "cats-d8c4vu"
+    base_url = "netwrck.com"
+    response = client.get(f"/{fiddle_name}/{base_url}")
+    
+    # We expect a successful response
+    assert response.status_code == 200
+    
+    # Verify content type is HTML
+    content_type = response.headers.get("content-type", "")
+    assert "text/html" in content_type
+    
+    # Check for expected content and injected scripts
+    assert "<script" in response.text
+    assert "proxyBase = '/cats-d8c4vu/'" in response.text
+    assert "currentDomain = 'netwrck.com'" in response.text
+    assert "addictingwordgames" in response.text

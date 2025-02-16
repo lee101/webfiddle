@@ -119,31 +119,42 @@ class MirroredContent(object):
 
     @staticmethod
     async def fetch_and_store(key_name, base_url, translated_address, mirrored_url):
-        """Fetch and cache a page.
-
-        Args:
-          key_name: Hash to use to store the cached page.
-          base_url: The hostname of the page that's being mirrored.
-          translated_address: The URL of the mirrored page on this site.
-          mirrored_url: The URL of the original page. Hostname should match
-            the base_url.
-
-        Returns:
-          A new MirroredContent object, if the page was successfully retrieved.
-          None if any errors occurred or the content could not be retrieved.
-        """
+        """Fetch and cache a page with redirect handling"""
+        final_url = mirrored_url
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(mirrored_url)
+            async with httpx.AsyncClient(max_redirects=3) as client:
+                # First HEAD request to check for redirects
+                head_resp = await client.head(mirrored_url, follow_redirects=True)
+                final_url = str(head_resp.url)
+                
+                # If redirected, update the mirrored URL
+                if final_url != mirrored_url:
+                    translated_address = final_url[len(HTTP_PREFIX):]
+                    mirrored_url = final_url
+                    key_name = get_url_key_name(mirrored_url)
+                    
+                    # Check cache again with new URL
+                    existing = MirroredContent.get_by_key_name(key_name)
+                    if existing:
+                        return existing
+
+                # Now get the full content
+                response = await client.get(mirrored_url, follow_redirects=True)
+                
         except httpx.HTTPError as e:
             logging.exception("Could not fetch URL: %s", e)
             return None
 
+        # Process response as before...
         adjusted_headers = {}
         for key, value in response.headers.items():
-            adjusted_key = key.lower()
-            if adjusted_key not in IGNORE_HEADERS:
-                adjusted_headers[adjusted_key] = value
+            if key.lower() == 'location':
+                # Rewrite Location header to maintain proxy context
+                parsed = urllib.parse.urlparse(value)
+                adjusted_value = f"/{base_url}/{parsed.netloc}{parsed.path}"
+                adjusted_headers['location'] = adjusted_value
+            elif key.lower() not in IGNORE_HEADERS:
+                adjusted_headers[key.lower()] = value
 
         content = response.content
         page_content_type = adjusted_headers.get("content-type", "")
