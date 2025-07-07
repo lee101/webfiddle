@@ -261,16 +261,34 @@ Check out: <a href="https://ebank.nz">eBank.nz</a> (Art Generator) |
 </p>
 <iframe style="min-width:600px;min-height:800px;width:100%;border:none" src="http://textadventure.v5games.com">
     </iframe>"""
+
+DIRECT_DOMAINS = [
+    "ebank.nz",
+    "netwrck.com",
+    "text-generator.io",
+    "bitbank.nz",
+    "readingtime.app.nz",
+    "rewordgame.com",
+    "bigmultiplayerchess.com",
+    "webfiddle.net",
+    "how.nz",
+    "helix.app.nz",
+]
 def request_blocker(fiddle_name):
+    domains_json = json.dumps(DIRECT_DOMAINS)
     return f"""
 <script >
 var proxyBase = '/{fiddle_name}/';
 var currentDomain = window.location.pathname.split('/')[2];
+var directDomains = {domains_json};
 function rewriteUrl(url) {{
     // Handle absolute URLs
     if (/^https?:\\/\\//.test(url)) {{
         const parser = document.createElement('a');
         parser.href = url;
+        if (directDomains.includes(parser.hostname)) {{
+            return url;
+        }}
         return proxyBase + parser.hostname + parser.pathname;
     }}
     // Handle root-relative URLs
