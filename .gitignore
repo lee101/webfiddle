@@ -44,3 +44,4 @@ node_modules
 .env
 .aider.*
 .venv/
+users.db

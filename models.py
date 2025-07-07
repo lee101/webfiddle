@@ -1,119 +1,133 @@
-import logging
-
-from google.cloud import ndb
-
-client = ndb.Client()
-
-
-def ndb_context():
-    return client.context()
-
-
+import sqlite3
+from dataclasses import dataclass, asdict, field
+from datetime import datetime
+from pathlib import Path
 import fixtures
 
-default_fiddle = None
+current_dir = Path(__file__).parent
+DATABASE_PATH = current_dir / "users.db"
 
+def get_connection():
+    return sqlite3.connect(DATABASE_PATH)
 
-class BaseModel(ndb.Model):
-    def default(self, o):
-        return o.to_dict()
+def init_db():
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS fiddles (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                description TEXT,
+                start_url TEXT,
+                script TEXT,
+                style TEXT,
+                script_language INTEGER,
+                style_language INTEGER,
+                created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL
+            )"""
+        )
+    conn.close()
 
-    @classmethod
-    def save(cls, obj):
-        with client.context():
-            return obj.put()
-
-    @classmethod
-    def delete(cls, obj):
-        with client.context():
-            return obj.key.delete()
-
-    @classmethod
-    def save_bulk(cls, objs):
-        with client.context():
-            return ndb.put_multi(objs)
-
-
-_cache = {}
-
-# we dont use this too much db
-class CacheKey(BaseModel):
-    # id = ndb.StringProperty(required=True)
-    lookup_key = ndb.StringProperty(required=True)
-    value = ndb.TextProperty()
-
-    # @classmethod
-    # def byId(cls, id):
-    #     with ndb_context():
-    #         return cls.query(cls.id == id).get()
-
-    @classmethod
-    def byKey(cls, key):
-        with ndb_context():
-            return cls.query(cls.lookup_key == key).get()
-
-
-class Fiddle(BaseModel):
-    id = ndb.StringProperty(required=True)
-
-    script = ndb.TextProperty()
-    style = ndb.TextProperty()
-
-    script_language = ndb.IntegerProperty()
-    style_language = ndb.IntegerProperty()
-
-    created = ndb.DateTimeProperty(auto_now_add=True)
-    updated = ndb.DateTimeProperty(auto_now=True)
-
-    title = ndb.StringProperty()
-    description = ndb.TextProperty()
-
-    start_url = ndb.StringProperty()
+@dataclass
+class Fiddle:
+    id: str = ""
+    script: str = ""
+    style: str = ""
+    script_language: int = fixtures.SCRIPT_TYPES["js"]
+    style_language: int = fixtures.STYLE_TYPES["css"]
+    title: str = ""
+    description: str = ""
+    start_url: str = ""
 
     @classmethod
-    def byId(cls, id):
-        with ndb_context():
-            return cls.query(cls.id == id).get()
+    def save(cls, obj: "Fiddle"):
+        conn = get_connection()
+        with conn:
+            row = conn.execute("SELECT id FROM fiddles WHERE id=?", (obj.id,)).fetchone()
+            if row:
+                conn.execute(
+                    """UPDATE fiddles SET title=?, description=?, start_url=?, script=?, style=?, script_language=?, style_language=?, updated=CURRENT_TIMESTAMP WHERE id=?""",
+                    (
+                        obj.title,
+                        obj.description,
+                        obj.start_url,
+                        obj.script,
+                        obj.style,
+                        obj.script_language,
+                        obj.style_language,
+                        obj.id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO fiddles (id, title, description, start_url, script, style, script_language, style_language) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        obj.id,
+                        obj.title,
+                        obj.description,
+                        obj.start_url,
+                        obj.script,
+                        obj.style,
+                        obj.script_language,
+                        obj.style_language,
+                    ),
+                )
+        conn.close()
 
     @classmethod
-    def byUrlKey(cls, urlkey):
+    def byId(cls, fiddle_id: str) -> "Fiddle | None":
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT id, title, description, start_url, script, style, script_language, style_language FROM fiddles WHERE id=?",
+            (fiddle_id,),
+        ).fetchone()
+        conn.close()
+        if row:
+            return Fiddle(
+                id=row[0],
+                title=row[1],
+                description=row[2],
+                start_url=row[3],
+                script=row[4],
+                style=row[5],
+                script_language=row[6],
+                style_language=row[7],
+            )
+        return None
+
+    @classmethod
+    def byUrlKey(cls, urlkey: str) -> "Fiddle | None":
         if not urlkey or urlkey.endswith("d8c4vu"):
             return default_fiddle
-        else:
-            # TODO save in memcache by urlkey
+        pos = urlkey.rfind("-")
+        if pos == -1:
+            return None
+        fid = urlkey[pos + 1 :]
+        return cls.byId(fid)
 
-            urlkey_last_dash_pos = urlkey.rfind("-")
-            if urlkey_last_dash_pos == -1:
-                return None
-            id = urlkey[urlkey_last_dash_pos + 1 :]
-
-            with ndb_context():
-                fiddle = _cache.get(id)
-                if fiddle:
-                    return fiddle
-                fiddle = cls.query(cls.id == id).get()
-                if fiddle:
-                    _cache[id] = fiddle
-                    # if not memcache.add(id, fiddle, time=3600):
-                    #     logging.error('memcache.add failed: key_name = "%s", '
-                    #                   'original_url = "%s"', id, fiddle)
-                return fiddle
-
-
-default_fiddle = Fiddle()
-default_fiddle.id = "d8c4vu"
-default_fiddle.style = "body {\n" "    background-color: skyblue;\n" "}\n"
-
-default_fiddle.script = (
-    "// replace the first image we see with a cat\n"
-    "document.images[0].src = 'http://thecatapi.com/api/images/get?format=src&type=gif';\n\n"
-    "// replace the google logo with a cat\n"
-    "document.getElementById('lga').innerHTML = '<a href=\"http://thecatapi.com\">"
-    '<img src="http://thecatapi.com/api/images/get?format=src&type=gif"></a>\';\n'
+# default fiddle
+default_fiddle = Fiddle(
+    id="d8c4vu",
+    style="body {\n    background-color: skyblue;\n}\n",
+    script=(
+        "// replace the first image we see with a cat\n"
+        "document.images[0].src = 'http://thecatapi.com/api/images/get?format=src&type=gif';\n\n"
+        "// replace the google logo with a cat\n"
+        "document.getElementById('lga').innerHTML = '<a href=\"http://thecatapi.com\"><img src=\"http://thecatapi.com/api/images/get?format=src&type=gif\"></a>';\n"
+    ),
+    script_language=fixtures.SCRIPT_TYPES["js"],
+    style_language=fixtures.STYLE_TYPES["css"],
+    title="cats",
+    description="cats via the cat api",
+    start_url="www.google.com",
 )
 
-default_fiddle.style_language = fixtures.STYLE_TYPES["css"]
-default_fiddle.script_language = fixtures.SCRIPT_TYPES["js"]
-default_fiddle.title = "cats"
-default_fiddle.description = "cats via the cat api"
-default_fiddle.start_url = "www.google.com"
+init_db()

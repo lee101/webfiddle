@@ -7,5 +7,11 @@
 </a><a id="share" class="btn header-btn" href="#">
     <i class="fa fa-share-alt"></i> Share
 </a>
+{% if request.session.get('user') %}
+<span class="user-info">{{ request.session['user'] }}</span>
+<a class="btn header-btn" href="/logout">Logout</a>
+{% else %}
+<a class="btn header-btn" id="login-link" href="/login">Login</a>
+{% endif %}
 
 
