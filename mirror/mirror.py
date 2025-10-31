@@ -179,10 +179,9 @@ class MirroredContent(object):
         if len(content) < int(response.headers.get("content-length", 0)):
             logging.warning("Truncated content from %s", mirrored_url)
         
-        # Store actual content length
-        adjusted_headers["content-length"] = str(len(content))
-        if "content-encoding" in adjusted_headers:
-            del adjusted_headers["content-encoding"]
+        # Remove content-length from stored headers
+        if "content-length" in adjusted_headers:
+            del adjusted_headers["content-length"]
 
         new_content = MirroredContent(
             base_url=base_url,
@@ -432,13 +431,27 @@ async def mirror_handler(request: Request, fiddle_name: str, base_url: str):
             # No nonce needed for scripts
             # Calculate actual content length after transformations
             final_content = final_html.encode('utf-8')
+            
+            # Set accurate content length
             headers["content-length"] = str(len(final_content))
-            return HTMLResponse(content=final_content, status_code=content.status, headers=headers)
+            
+            # Remove conflicting headers
+            headers.pop("content-encoding", None)
+            
+            return HTMLResponse(
+                content=final_content,
+                status_code=content.status,
+                headers=headers
+            )
         else:
             return HTMLResponse(content=add_data, status_code=content.status, headers=headers)
     else:
-        # For non-HTML content, use original data but verify length
+        # For non-HTML content, validate length
         content_data = content.data
-        if len(content_data) != int(headers.get("content-length", 0)):
-            headers["content-length"] = str(len(content_data))
-        return Response(content=content_data, headers=headers, status_code=content.status)
+        headers["content-length"] = str(len(content_data))
+        headers.pop("content-encoding", None)
+        return Response(
+            content=content_data,
+            headers=headers,
+            status_code=content.status
+        )

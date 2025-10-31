@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 import os
 
 # Clean up any existing cache file to start with a fresh database
-if os.path.exists("cache.db"):
-    os.remove("cache.db")
+# if os.path.exists("cache.db"):
+#     os.remove("cache.db")
 
 # Import the router and dependent models from mirror
 from mirror.mirror import mirror_router
