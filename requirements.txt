@@ -115,7 +115,7 @@ pyparsing==3.2.3
     # via httplib2
 python-jose[cryptography]==3.5.0
     # via -r requirements.in
-python-multipart==0.0.20
+python-multipart==0.0.22
     # via -r requirements.in
 requests==2.32.4
     # via
