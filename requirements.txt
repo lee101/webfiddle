@@ -21,13 +21,13 @@ certifi==2025.6.15
     #   httpcore
     #   httpx
     #   requests
-cffi==1.17.1
+cffi==2.0.0
     # via cryptography
 charset-normalizer==3.4.2
     # via requests
 click==8.2.1
     # via uvicorn
-cryptography==45.0.5
+cryptography==46.0.5
     # via python-jose
 ecdsa==0.19.1
     # via python-jose
