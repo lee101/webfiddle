@@ -2,6 +2,7 @@
 import hashlib
 import logging
 import os
+import shutil
 import urllib.parse
 from pathlib import Path
 from typing import Optional
@@ -73,6 +74,48 @@ def init_db():
     conn.close()
 
 init_db()
+
+# Disk space management
+CACHE_DB_PATH = Path(__file__).parent.parent / 'cache.db'
+MIN_FREE_SPACE_GB = 10  # Minimum free space to maintain
+CRITICAL_FREE_SPACE_GB = 1  # Below this, skip caching entirely
+EVICTION_DAYS = 7  # Delete entries expiring within this many days
+
+def get_free_space_gb():
+    """Get free space in GB for the disk containing cache.db"""
+    try:
+        stat = shutil.disk_usage(CACHE_DB_PATH.parent)
+        return stat.free / (1024 ** 3)
+    except Exception as e:
+        logging.error("Failed to get disk space: %s", e)
+        return float('inf')  # Assume plenty of space on error
+
+def evict_old_cache_entries():
+    """Delete expired and soon-to-expire cache entries"""
+    try:
+        conn = sqlite3.connect('cache.db')
+        # Delete expired entries and entries expiring within EVICTION_DAYS
+        cutoff = int(time.time()) + (EVICTION_DAYS * 24 * 3600)
+        conn.execute("DELETE FROM mirrored_content WHERE expiry < ?", (cutoff,))
+        deleted = conn.total_changes
+        conn.commit()
+        conn.close()
+        logging.info("Evicted %d cache entries to free disk space", deleted)
+        return deleted
+    except Exception as e:
+        logging.error("Failed to evict cache entries: %s", e)
+        return 0
+
+def ensure_disk_space():
+    """Check disk space and evict cache if needed. Returns True if OK to cache."""
+    free_gb = get_free_space_gb()
+    if free_gb < CRITICAL_FREE_SPACE_GB:
+        logging.warning("Critical low disk space: %.2f GB free, skipping cache", free_gb)
+        return False  # Don't cache at all
+    if free_gb < MIN_FREE_SPACE_GB:
+        logging.warning("Low disk space: %.2f GB free, evicting cache entries", free_gb)
+        evict_old_cache_entries()
+    return True
 
 def get_url_key_name(url):
     url_hash = hashlib.sha256()
@@ -192,17 +235,21 @@ class MirroredContent(object):
             data=content
         )
         try:
-            conn = sqlite3.connect('cache.db')
-            conn.execute(
-                "INSERT OR REPLACE INTO mirrored_content "
-                "(key_name, original_address, translated_address, status, headers, data, base_url, expiry) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (key_name, new_content.original_address, new_content.translated_address, new_content.status,
-                 json.dumps(new_content.headers), new_content.data, new_content.base_url,
-                 int(time.time()) + EXPIRATION_DELTA_SECONDS)
-            )
-            conn.commit()
-            conn.close()
+            # Ensure we have disk space before caching
+            if ensure_disk_space():
+                conn = sqlite3.connect('cache.db')
+                conn.execute(
+                    "INSERT OR REPLACE INTO mirrored_content "
+                    "(key_name, original_address, translated_address, status, headers, data, base_url, expiry) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (key_name, new_content.original_address, new_content.translated_address, new_content.status,
+                     json.dumps(new_content.headers), new_content.data, new_content.base_url,
+                     int(time.time()) + EXPIRATION_DELTA_SECONDS)
+                )
+                conn.commit()
+                conn.close()
+            else:
+                logging.info("Skipping cache due to low disk space for: %s", mirrored_url)
         except Exception as e:
             logging.error('SQLite insert failed: key_name = "%s", original_url = "%s", error: %s',
                           key_name, mirrored_url, e)
