@@ -6,10 +6,8 @@ import re
 import string
 from time import mktime
 import urllib
-from models import BaseModel
+from dataclasses import is_dataclass, asdict
 from urllib.parse import quote_plus
-
-from google.cloud import ndb
 
 class GameOnUtils(object):
     debug = os.environ.get('SERVER_SOFTWARE', '').startswith('Development/')
@@ -34,13 +32,12 @@ class GameOnUtils(object):
         def default(self, obj):
             if isinstance(obj, datetime.datetime):
                 return int(mktime(obj.timetuple()))
-            if isinstance(obj, BaseModel):
-                obj.key = None
-                return obj.to_dict()
-            if isinstance(obj, ndb.Key):
-                return ''
-
-            return obj.__dict__ #json.JSONEncoder.default(self, obj.__dict__)
+            if is_dataclass(obj):
+                return asdict(obj)
+            try:
+                return json.JSONEncoder.default(self, obj)
+            except TypeError:
+                return obj.__dict__
 
 
     @staticmethod

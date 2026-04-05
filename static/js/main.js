@@ -142,6 +142,28 @@ var main = (function ($) {
                 runFunction();
             }
         });
+
+        $('#login-link').on('click', function (evt) {
+            evt.preventDefault();
+            var html = nunjucks.render('templates/login_form.jinja2', {
+                action: '/login',
+                submit_label: 'Login',
+                login: true
+            });
+            webutils.setModal(html);
+            return false;
+        });
+
+        $(document).on('click', '#register-link', function (evt) {
+            evt.preventDefault();
+            var html = nunjucks.render('templates/login_form.jinja2', {
+                action: '/register',
+                submit_label: 'Register',
+                login: false
+            });
+            webutils.setModal(html);
+            return false;
+        });
     };
 
     self.addEditorCompletion = function (editor, type) {

@@ -1,0 +1,12 @@
+<form method="post" action="{{ action }}" id="login-form">
+    <label>Username:</label>
+    <input type="text" name="username" required>
+    <label>Password:</label>
+    <input type="password" name="password" required>
+    <button type="submit">{{ submit_label }}</button>
+</form>
+{% if login %}
+<p>Don't have an account? <a href="/register" id="register-link">Register</a></p>
+{% else %}
+<p>Already have an account? <a href="/login" id="login-page-link">Login</a></p>
+{% endif %}

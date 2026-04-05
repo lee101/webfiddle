@@ -45,3 +45,5 @@ node_modules
 .aider.*
 cache.db-wal
 cache.db-shm
+.venv/
+users.db

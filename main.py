@@ -3,22 +3,30 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.wsgi import WSGIMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+
+import sqlite3
+import bcrypt
+
+current_dir = Path(__file__).parent
 
 import fixtures
 from gameon_utils import GameOnUtils
 from mirror.mirror import mirror_router
-from models import Fiddle, default_fiddle
+from models import Fiddle, default_fiddle, init_db, DATABASE_PATH
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory=os.path.dirname(__file__))
+app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "changeme"))
 
-current_dir = Path(__file__).parent
+init_db()
+
+templates = Jinja2Templates(directory=os.path.dirname(__file__))
 debug = (
     os.environ.get("SERVER_SOFTWARE", "").startswith("Development")
     or os.environ.get("IS_DEVELOP", "") == "1"
@@ -124,6 +132,66 @@ async def get_fiddle_handler(request: Request, fiddlekey: str):
         "static_url": GCLOUD_STATIC_BUCKET_URL,
         "url": request.url,
     })
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request):
+    return templates.TemplateResponse(
+        "templates/login.jinja2",
+        {
+            "request": request,
+            "title": "Login",
+            "action": "/login",
+            "submit_label": "Login",
+            "login": True,
+        },
+    )
+
+
+@app.post("/login")
+async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    conn = sqlite3.connect(DATABASE_PATH)
+    row = conn.execute("SELECT password_hash FROM users WHERE username=?", (username,)).fetchone()
+    conn.close()
+    if row and bcrypt.checkpw(password.encode(), row[0].encode()):
+        request.session["user"] = username
+        return RedirectResponse("/", status_code=302)
+    return HTMLResponse("Invalid credentials", status_code=400)
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_form(request: Request):
+    return templates.TemplateResponse(
+        "templates/login.jinja2",
+        {
+            "request": request,
+            "title": "Register",
+            "action": "/register",
+            "submit_label": "Register",
+            "login": False,
+        },
+    )
+
+
+@app.post("/register")
+async def register(request: Request, username: str = Form(...), password: str = Form(...)):
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    try:
+        conn = sqlite3.connect(DATABASE_PATH)
+        with conn:
+            conn.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed))
+    except sqlite3.IntegrityError:
+        conn.close()
+        return HTMLResponse("User already exists", status_code=400)
+    conn.close()
+    request.session["user"] = username
+    return RedirectResponse("/", status_code=302)
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/", status_code=302)
 
 @app.get("/sitemap.xml", response_class=HTMLResponse)
 async def sitemap_handler(request: Request):

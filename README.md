@@ -12,3 +12,4 @@ Development maintained on [trello](https://trello.com/b/NA2zAjEQ/development)
 
 
 ================
+This version uses a local SQLite database for login and for storing saved fiddles using bcrypt hashed passwords.
