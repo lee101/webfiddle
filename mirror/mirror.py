@@ -292,7 +292,7 @@ add_code = """"""
 
 big_add_code = """
 <p style="text-align:center;padding:10px;background:#f5f5f5;margin:10px 0">
-<a href="https://x.com/leeleepenkman" target="_blank">Follow Lee on X/Twitter</a> - Father, Husband, Serial builder creating AI, crypto, games & web tools. We are friends :) AI Will Come To Life!
+<a href="https://x.com/leeleepenkman" target="_blank">Follow Lee on X</a> - Father, Husband, Serial builder creating AI, crypto, games & web tools. We are friends :) AI Will Come To Life!
 <br><br>
 Check out: <a href="https://ebank.nz">eBank.nz</a> (Art Generator) | 
 <a href="https://netwrck.com">Netwrck.com</a> (AI Tools) |

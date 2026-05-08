@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+
+{% block jsheaders %}
+    <script>
+        window.currentSavedFiddle = {{ current_saved_fiddle | safe }};
+        window.fixtures = (function () {
+            var self = {};
+            self.SCRIPT_TYPES = {{ script_types | safe }};
+            self.STYLE_TYPES = {{ style_types | safe }};
+            return self;
+        })();
+    </script>
+{% endblock %}
+
+{% block content %}
+{% endblock %}

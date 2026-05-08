@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+{% block content %}
+<div style="max-width:400px;margin:60px auto;padding:20px;">
+<h2>{{ title }}</h2>
+<form method="post" action="{{ action }}" id="login-form">
+    <label>Username:</label>
+    <input type="text" name="username" required style="width:100%;padding:8px;margin:5px 0 15px 0;">
+    <label>Password:</label>
+    <input type="password" name="password" required style="width:100%;padding:8px;margin:5px 0 15px 0;">
+    <button type="submit" class="btn" style="padding:8px 20px;">{{ submit_label }}</button>
+</form>
+{% if is_login %}
+<p>Don't have an account? <a href="/register" id="register-link">Register</a></p>
+{% else %}
+<p>Already have an account? <a href="/login" id="login-page-link">Login</a></p>
+{% endif %}
+</div>
+{% endblock %}

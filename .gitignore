@@ -47,3 +47,7 @@ cache.db-wal
 cache.db-shm
 .venv/
 users.db
+*.gz
+*.br
+*.db-wal
+*.db-shm
