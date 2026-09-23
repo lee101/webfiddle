@@ -42,6 +42,7 @@ var webFrame = (function ($) {
             self.busyTries = 0;
         }
         self.lastNav = {fiddle: fiddle, url: url};
+        document.cookie = 'wf_ed=1; path=/; max-age=2592000; SameSite=Lax; Secure';
         if (typeof url == 'undefined') {
             url = self.getUrl();
         }
