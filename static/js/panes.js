@@ -48,7 +48,6 @@ Ext.onReady(function () {
                         allowBlank: true,
                         name: 'fiddle_title',
                         id: 'title',
-                        vtype: 'text',
                         width: '100%',
                         emptyText: 'name your fiddle'
                     },
@@ -58,7 +57,6 @@ Ext.onReady(function () {
                         name: 'fiddle_description',
                         id: 'description',
                         title: 'description',
-                        vtype: 'text',
                         width: '100%',
                         emptyText: 'description'
                     },

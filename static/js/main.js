@@ -180,6 +180,11 @@ var main = (function ($) {
             }
         });
 
+        var fixAlts = function () {
+            $('img:not([alt])').attr('alt', '');
+        };
+        fixAlts();
+        window.setTimeout(fixAlts, 2500);
         var tipKey = 'wf_onboard_seen_v1', $tip = $('#wf-onboard');
         var tipSeen = false;
         try { tipSeen = !!window.localStorage.getItem(tipKey); } catch (e) {}
