@@ -9,6 +9,9 @@ var options = (function ($) {
         self.$fiddleTitle.attr('title', 'Title');
         self.$fiddleDescription.attr('title', 'Description');
         self.$startUrl.attr('title', 'Starting URL');
+        self.$fiddleTitle.attr('aria-label', 'Fiddle title');
+        self.$fiddleDescription.attr('aria-label', 'Fiddle description');
+        self.$startUrl.attr('aria-label', 'Start URL: the web page your code runs on');
 
         self.$fiddleTitle.focus();
         window.setTimeout(function () {

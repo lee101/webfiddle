@@ -1,0 +1,34 @@
+.webfiddle-light-blue{color:#0072a8}
+.main-header{display:block}
+.main-header_home{display:inline}
+.main-header_home img{display:inline;width:64px;height:50px}
+.x-panel-header-default,.x-panel-header-default-horizontal,.x-panel-header-default-vertical{background-color:#0f5e99!important;border-color:#0f5e99!important}
+.x-panel-default{border-color:#0f5e99}
+.x-panel-body-default{border-color:#0f5e99}
+.x-form-empty-field,.x-form-empty-field textarea{color:#666!important}
+.x-form-text,textarea.x-form-field{color:#222}
+.wf-onboard{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 14px;background:#fff8d6;border-bottom:1px solid #e8d98a;color:#3a3200;font:14px/1.4 -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.wf-onboard[hidden]{display:none}
+.wf-onboard_steps{display:flex;flex-wrap:wrap;gap:4px 16px;flex:1;min-width:0}
+.wf-onboard,.wf-onboard :not(.fa),.wf-share,.wf-share :not(.fa),.wf-busy,.wf-busy :not(.fa){font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.wf-onboard button{font:600 14px/1 -apple-system,Segoe UI,Roboto,Arial,sans-serif;cursor:pointer;border-radius:6px;min-height:32px}
+.wf-onboard_try{background:#0f5e99;color:#fff;border:0;padding:8px 14px}
+.wf-onboard_try:hover{background:#0b4a7a}
+.wf-onboard_close{background:transparent;border:1px solid #c9b95c;color:#3a3200;width:32px;font-size:18px}
+.wf-share{font:15px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#222}
+
+.wf-share h3{font-size:18px;margin:4px 0 10px}
+.wf-share label{display:block;font-weight:600;margin:14px 0 4px}
+.wf-share_row{display:flex;gap:8px}
+.wf-share_row input{flex:1;min-width:0;padding:8px 10px;border:1px solid #9aa4ae;border-radius:6px;font:14px consolas,monospace;color:#222}
+.wf-share button,.wf-share a.wf-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:6px;border:1px solid #0f5e99;background:#fff;color:#0f5e99;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;min-height:36px;box-sizing:border-box}
+.wf-share button.wf-primary{background:#0f5e99;color:#fff}
+.wf-share_socials{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.wf-share_note{margin-top:14px;font-size:13px;color:#555}
+.wf-busy{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;text-align:center;background:#f7f9fb;color:#333;font:15px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.wf-busy button{padding:8px 14px;border-radius:6px;border:0;background:#0f5e99;color:#fff;font-weight:600;cursor:pointer}
+.web-frame{position:relative}
+.header-btn:focus-visible,.wf-onboard button:focus-visible,.wf-share button:focus-visible{outline:3px solid #ffb400;outline-offset:1px}
+.wf-onboard_short{display:none;flex:1;min-width:0}
+@media (max-width:700px){.wf-onboard_steps{display:none}.wf-onboard_short{display:block}.wf-onboard{padding:6px 10px;flex-wrap:nowrap}}
+.web-iframe-loading{position:absolute;top:0;left:0;z-index:1;background:#fff}

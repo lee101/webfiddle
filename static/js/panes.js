@@ -30,6 +30,7 @@ Ext.onReady(function () {
             {
                 region: 'west',
                 collapsible: true,
+                collapsed: window.innerWidth < 700,
 //                layout: 'absolute',
                 title: 'Options',
                 split: true,
