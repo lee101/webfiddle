@@ -1,23 +1,12 @@
 User-agent: *
-Disallow: /GARecord
-Disallow: /UserReviewController
-Disallow: /TodaysLowestFaresAjax
-Disallow: /PageMoniker
-Disallow: /TALSO.swf
-Disallow: /BigMapAjax
-Disallow: /_
-Disallow: /JSErrorRecord
-Disallow: /ActionRecord
-Disallow: /PerformancePingback
-Disallow: /PhotoSlideshow
-Disallow: /FlightsController
-Disallow: /SavesAjax
-Disallow: /uvpages/adcom.html
-Disallow: /watch_fragments_ajax
-Disallow: /VacationRentalReview
-Disallow: /
-Allow: /$
-#Allow: /*-*/
+Allow: /
+Disallow: /*-*/
+Disallow: /api/
+Disallow: /_ah/
+Disallow: /createfiddle
+Disallow: /login
+Disallow: /register
+Disallow: /logout
+Allow: /static/
 
-# Wait 1 second between successive requests.
-Crawl-delay: 1
+Sitemap: https://webfiddle.net/sitemap.xml
