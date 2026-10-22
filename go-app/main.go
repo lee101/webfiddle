@@ -721,6 +721,10 @@ func (h *Handler) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	path := string(ctx.Path())
 	method := string(ctx.Method())
 
+	if h.serveBlog(ctx, path) {
+		return
+	}
+
 	// Static files
 	if strings.HasPrefix(path, "/static/") {
 		h.staticFS(ctx)
@@ -738,7 +742,7 @@ func (h *Handler) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	case path == "/robots.txt":
 		h.staticFS(ctx)
 
-	case path == "/" && method == "GET":
+	case path == "/" && (method == "GET" || method == "HEAD"):
 		h.handleIndex(ctx)
 
 	case path == "/createfiddle" && method == "GET":
@@ -995,8 +999,8 @@ func (h *Handler) handleSitemap(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("text/xml; charset=utf-8")
 	fmt.Fprint(ctx, `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://webfiddle.net/</loc><priority>1.0</priority></url>
-</urlset>`)
+  <url><loc>https://webfiddle.net/</loc><lastmod>2026-10-22</lastmod><priority>1.0</priority></url>
+`+blogSitemapEntries()+`</urlset>`)
 }
 
 // ==================== Mirror/Proxy Handler ====================
