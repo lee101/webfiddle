@@ -549,6 +549,9 @@ func TestHTTPS(t *testing.T) {
 		t.Skipf("HTTPS not available (DNS may not have propagated): %v", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		t.Skip("webfiddle.net rate-limited this client (429)")
+	}
 	if resp.StatusCode != 200 {
 		t.Fatalf("HTTPS homepage returned %d, expected 200", resp.StatusCode)
 	}
@@ -564,6 +567,9 @@ func TestHTTPSProxy(t *testing.T) {
 		t.Skipf("HTTPS not available: %v", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		t.Skip("webfiddle.net rate-limited this client (429)")
+	}
 	if resp.StatusCode != 200 {
 		t.Fatalf("HTTPS proxy returned %d, expected 200", resp.StatusCode)
 	}

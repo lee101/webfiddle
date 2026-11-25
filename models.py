@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
@@ -5,7 +6,7 @@ from pathlib import Path
 import fixtures
 
 current_dir = Path(__file__).parent
-DATABASE_PATH = current_dir / "users.db"
+DATABASE_PATH = Path(os.environ.get("WEBFIDDLE_DATABASE_PATH", current_dir / "users.db"))
 
 def get_connection():
     return sqlite3.connect(DATABASE_PATH)
